@@ -107,7 +107,7 @@ curl -fsSL https://raw.githubusercontent.com/Plainwire-development/Wiregrid/v1.0
 
 `WIREGRID_VERSION` selects a tag (`v` is optional). `WIREGRID_TARBALL` selects an archive already on disk. a checkout that contains `native/c` and `priv/ui` builds the c library on this machine. `PREFIX` chooses the directory the same way as a local run.
 
-## before production
+## before production (for maintainers)
 
 start with `:balanced`, set a real authorizer for anything internet facing, use a durable adapter for data you care about, keep beam distribution private, and load test the same event sizes and fanout shape you expect in production.
 
