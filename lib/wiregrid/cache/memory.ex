@@ -152,22 +152,30 @@ defmodule Wiregrid.Cache.Memory do
           [] ->
             record = {key, token, :counter, delta, expires}
 
-            if :ets.insert_new(t.memory_cache, record) and owner?(t, key, token) do
-              case schedule(instance, key, token, ttl, expires) do
-                :ok ->
-                  if owner?(t, key, token) do
-                    {:ok, delta}
-                  else
-                    _ = delete_record(t.memory_cache, record)
-                    incr_retry(instance, t, cfg, key, delta, ttl, expires, attempts + 1)
-                  end
+            # insert_new fails when another writer already stored this key.
+            # The losing tuple can be identical (same token, delta, and
+            # millisecond deadline), so a failed insert must not delete the
+            # winner's row.
+            if :ets.insert_new(t.memory_cache, record) do
+              if owner?(t, key, token) do
+                case schedule(instance, key, token, ttl, expires) do
+                  :ok ->
+                    if owner?(t, key, token) do
+                      {:ok, delta}
+                    else
+                      _ = delete_record(t.memory_cache, record)
+                      incr_retry(instance, t, cfg, key, delta, ttl, expires, attempts + 1)
+                    end
 
-                {:error, _} = error ->
-                  delete_owned(instance, t, key)
-                  error
+                  {:error, _} = error ->
+                    delete_owned(instance, t, key)
+                    error
+                end
+              else
+                _ = delete_record(t.memory_cache, record)
+                incr_retry(instance, t, cfg, key, delta, ttl, expires, attempts + 1)
               end
             else
-              _ = delete_record(t.memory_cache, record)
               incr_retry(instance, t, cfg, key, delta, ttl, expires, attempts + 1)
             end
 
