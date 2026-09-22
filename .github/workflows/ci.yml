@@ -23,7 +23,7 @@ jobs:
             elixir: "1.20.4"
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
@@ -57,7 +57,7 @@ jobs:
       WIREGRID_POSTGRES_URL: ecto://wiregrid:wiregrid@127.0.0.1:5432/wiregrid
       WIREGRID_REDIS_URL: redis://127.0.0.1:6379/0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "27.3"
@@ -70,7 +70,7 @@ jobs:
   bindings:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "29.1"
@@ -92,7 +92,7 @@ jobs:
   native:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: strict c build and protocol test
         run: make -C native/c clean test
       - name: cmake build and test
@@ -110,7 +110,7 @@ jobs:
   scylla-adapter:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "27.3"
