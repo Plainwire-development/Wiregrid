@@ -1,0 +1,37 @@
+<p class="kicker">Manual 1.0</p>
+<h1>Wiregrid</h1>
+<p>Wiregrid is a BEAM realtime library for sessions, subscriptions, fanout, presence, rooms, acknowledgements, reconnects, storage, rate limits, and optional clustering. Elixir is the main API. The same runtime is reachable from Erlang through <code>wiregrid_api</code>, from Gleam and LFE bindings, from a Cowboy WebSocket handler, and from non-BEAM programs through a versioned TCP protocol and a C client.</p>
+<p>The library keeps product rules outside itself. Users, roles, message schemas, and the product database stay in the embedding application. Wiregrid validates its own inputs, bounds its own tables, and asks an authorizer before a session is allowed to publish, subscribe, join, or signal.</p>
+
+<h2>What you need</h2>
+<p>Elixir 1.17 or newer, on a supported OTP release. The runtime has no mandatory third-party dependency. Postgrex, Redix, Xandra, Cowboy, and StreamData are test-only, so a production release does not pull them in unless the host application already depends on them.</p>
+<p>CI compiles the core suite on four pairs: OTP 26.2 with Elixir 1.17.3, OTP 27.3 with Elixir 1.18.4, OTP 28.5 with Elixir 1.20.4, and OTP 29.1 with Elixir 1.20.4. The Cowboy test pin is 2.18 with Cowlib 2.19, because Cowlib 2.20 uses the <code>maybe</code> keyword and does not compile on OTP 26.</p>
+
+<h2>Two ways in</h2>
+<p>For a chat application, define a module with <code>use Wiregrid.Chat</code> and put that module in the supervision tree. <code>connect/3</code> returns <code>{:ok, session_id}</code>. <code>say/4</code> persists channel messages. <code>history/3</code> pages that same stream. <code>whisper/4</code> addresses <code>{:user, user_id}</code>.</p>
+<p>For anything else, call <code>Wiregrid</code> directly: start an instance, connect a session owned by a pid, subscribe to a topic tuple, and publish. Deliveries arrive in the owner process as <code>{:"$wiregrid", envelope}</code>. The envelope carries <code>instance</code>, <code>session_id</code>, <code>delivery_id</code>, <code>topic</code>, <code>class</code>, an optional <code>context</code>, and either <code>event</code>, <code>payload</code>, or both, depending on <code>delivery_format</code>.</p>
+
+<h2>How this manual is laid out</h2>
+<ul>
+  <li><a href="install.html">Install</a> covers Mix, <code>scripts/install.sh</code>, prefixes, and the v1.0.0 curl one-liner.</li>
+  <li><a href="chat.html">Chat façade</a>, <a href="sessions.html">sessions</a>, <a href="publish.html">publish</a>, and <a href="delivery.html">delivery</a> are the day-to-day calls.</li>
+  <li><a href="presence.html">Presence, rooms, and signals</a> and <a href="storage.html">storage</a> cover the adjacent state.</li>
+  <li><a href="configuration.html">Configuration</a> quotes every profile limit and every base key.</li>
+  <li><a href="security.html">Authorization</a> explains <code>authorize/4</code>, AllowAll, and fail-closed callbacks.</li>
+  <li>Language chapters cover <a href="elixir.html">Elixir</a>, <a href="erlang.html">Erlang</a>, <a href="gleam.html">Gleam</a>, <a href="lfe.html">LFE</a>, the <a href="foreign.html">C ABI</a>, the <a href="ui.html">browser kit</a>, and <a href="cowboy.html">Cowboy</a>.</li>
+  <li><a href="operations.html">Operations</a> and <a href="architecture.html">architecture</a> are the chapters to read before production traffic.</li>
+</ul>
+<p>The same pages are published at <a href="https://plainwire-development.github.io/Wiregrid/">plainwire-development.github.io/Wiregrid</a>. Opening <code>site/index.html</code> from a checkout works without a server: styles, search, and the highlighter are local files.</p>
+
+<h2>A short path that already works</h2>
+<pre><code class="language-elixir">defmodule MyApp.Chat do
+  use Wiregrid.Chat,
+    instance: :chat,
+    options: [profile: :small]
+end
+
+{:ok, session} = MyApp.Chat.connect("alice")
+:ok = MyApp.Chat.join(session, "general")
+{:ok, _result} = MyApp.Chat.say(session, "general", "hello")
+{:ok, rows, cursor} = MyApp.Chat.history("general", nil, 50)</code></pre>
+<p>The generated module’s <code>child_spec/1</code> starts the instance. Channel messages use the topic <code>{:channel, "general"}</code> and are stored with <code>persist: true</code> and <code>class: :durable</code>. The owner process still has to acknowledge durable deliveries, or the session’s reservation count climbs until the hard queue refuses more work.</p>

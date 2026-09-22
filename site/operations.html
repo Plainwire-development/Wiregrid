@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clustering and operations — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html" aria-current="page">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Operations</p>
+<h1>Clustering and operations</h1>
+<p>Clustering is off by default (<code>cluster: false</code>). Turn it on only when distribution is already a private network with a cookie and, where you need it, TLS distribution. Peers are trusted. Do not publish EPMD or the distribution port.</p>
+
+<h2 id="what-clustering-does">What clustering does</h2>
+<pre><code class="language-elixir">Wiregrid.start_instance(:chat,
+  profile: :balanced,
+  cluster: true,
+  cluster_shards: 16,
+  cluster_namespace: :chat,
+  cluster_dedupe_ttl_ms: 60_000,
+  cluster_pending_per_shard: 10_000
+)</code></pre>
+<p>Enabled clustering uses a fixed shard count and fixed <code>:pg</code> groups. It does not create a process group per topic. Local ETS remains authoritative for local sessions and the local hot fanout path. Cluster messages carry event ids and are dropped when the dedupe table has already seen them. That table is capped by <code>max_cluster_dedupe</code> and entries expire after <code>cluster_dedupe_ttl_ms</code> (60,000).</p>
+<p><code>cluster_shards</code> defaults to 16 and must be from 1 to 256. Each shard mailbox is capped by <code>cluster_pending_per_shard</code> (10,000). Remote presence rows and remote room edges have their own profile caps, <code>max_remote_presence</code> and <code>max_remote_room_edges</code>. The namespace keeps two instances on one distributed node from sharing traffic. It defaults to <code>:instance</code> and may be an atom, a non-negative integer, a short binary, or a tuple of up to four such parts.</p>
+<p>Node join starts a bounded resync. A periodic pass repairs state if the first resync was incomplete. Presence and room indexes are keyed so a lost node can be cleaned in batches. During a partition, presence and room views can disagree. Durable events that matter should be in the storage adapter, which is not a cluster consensus log. Publish forwards to the cluster when the call’s <code>:cluster</code> option and the instance flag both say so. The publish result includes a <code>cluster</code> field describing that forward.</p>
+
+<h2 id="health">Health</h2>
+<pre><code class="language-elixir">Wiregrid.health(:chat)
+Wiregrid.readiness(:chat)          # :ready | :not_ready
+Wiregrid.readiness_report(:chat)
+Wiregrid.liveness(:chat)
+Wiregrid.stats(:chat)
+Wiregrid.pressure(:chat)
+Wiregrid.prometheus_metrics(:chat)</code></pre>
+<p><code>health/1</code> returns a map with <code>status</code> (<code>:ok</code>, <code>:degraded</code>, or <code>:down</code> when the instance is missing), plus <code>runtime</code>, <code>expiry</code>, <code>storage</code>, <code>cache</code>, <code>webhook</code>, <code>cluster</code>, <code>draining</code>, and <code>sessions</code>. Status is <code>:ok</code> only when every present component is healthy.</p>
+<p>Readiness is <code>:not_ready</code> when health is degraded (<code>reason: :unhealthy</code>), when the instance is draining (<code>reason: :draining</code>), or when any resource is at or above <code>readiness_pressure_threshold</code> (default <code>1.0</code>, so the default trips only at the cap). The report lists saturated resources under <code>reason: :resource_pressure</code>. A missing instance is <code>reason: :instance_unavailable</code>. Liveness checks that the instance tables exist and the runtime process answers.</p>
+
+<h2 id="metrics">Metrics</h2>
+<p><code>Wiregrid.Observability.prometheus/1</code> prints a fixed text payload. The application exposes it on whatever HTTP endpoint it already has. Wiregrid does not open a port for metrics. Gauges include <code>sessions</code>, <code>subscriptions</code>, <code>presence_watches</code>, <code>room_memberships</code>, and <code>delivery_reservations</code>. Counters include:</p>
+<ul>
+  <li><code>connections_total</code>, <code>disconnects_total</code>, <code>deliveries_total</code></li>
+  <li><code>dropped_ephemeral</code>, <code>slow_consumers</code>, <code>admission_rejections</code>, <code>control_rejections</code></li>
+  <li><code>callback_rejections</code>, <code>rate_limit_rejections</code></li>
+  <li><code>adapter_calls_total</code>, <code>adapter_failures</code>, <code>adapter_timeouts</code>, <code>adapter_rejections</code></li>
+  <li><code>cluster_messages_sent</code>, <code>cluster_messages_received</code>, <code>cluster_messages_dropped</code>, <code>cluster_resyncs</code></li>
+  <li><code>webhook_enqueued</code>, <code>webhook_delivered</code>, <code>webhook_retries</code>, <code>webhook_failures</code></li>
+  <li><code>topology_syncs</code>, <code>topology_sync_failures</code></li>
+  <li><code>dispatch_plans_compiled</code>, <code>dispatch_plan_executions</code>, <code>dispatch_plan_failures</code></li>
+</ul>
+<p><code>telemetry_metric_events</code> defaults to false. When true, the same numbers can be emitted as telemetry. There are still no per-user labels.</p>
+
+<h2 id="drain">Drain</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.drain(:chat)
+:ok = Wiregrid.await_idle(:chat, 10_000)
+:ok = Wiregrid.undrain(:chat)
+:ok = Wiregrid.graceful_shutdown(:chat, 10_000)</code></pre>
+<p><code>drain/1</code> stops new admission and still accepts acknowledgements and cleanup. <code>await_idle/2</code> waits until delivery reservations, webhook work, and cluster pending work are zero. The default timeout is 10,000 ms. A negative timeout is <code>{:error, :invalid_timeout}</code>. <code>graceful_shutdown/2</code> drains, waits, and stops the instance. Use it during a rolling replacement. A healthy Wiregrid process does not make an exhausted Postgres pool healthy; watch the caller-owned pools beside these gauges.</p>
+
+<h2 id="a-release-checklist">A release checklist</h2>
+<ul>
+  <li><code>./scripts/verify.sh</code> on the OTP and Elixir pair you deploy.</li>
+  <li>Adapter integration tests against services that match production.</li>
+  <li><code>scripts/load.sh</code> with realistic sizes, fanout, ack delay, and slow clients.</li>
+  <li>Limits chosen on purpose. <code>:large</code> is a ceiling, not a tuning shortcut.</li>
+  <li>A real authorizer on every internet-facing transport.</li>
+  <li>Distribution kept private.</li>
+  <li>Backups and restore tested for the durable adapter.</li>
+  <li>Drain during replacement.</li>
+</ul>
+<p>The Linux release asset is built by <code>.github/workflows/release.yml</code> when a <code>v*</code> tag is pushed. The asset name is <code>wiregrid-&lt;version&gt;-linux-x86_64.tar.gz</code>, with <code>SHA256SUMS</code> beside it.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#what-clustering-does">What clustering does</a></li><li><a class="h2" href="#health">Health</a></li><li><a class="h2" href="#metrics">Metrics</a></li><li><a class="h2" href="#drain">Drain</a></li><li><a class="h2" href="#a-release-checklist">A release checklist</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

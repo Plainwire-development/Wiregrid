@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authorization and security — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html" aria-current="page">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Boundary</p>
+<h1>Authorization and security</h1>
+<p>Wiregrid bounds its own runtime. The embedding application decides who a user is and what that user may do. Identity, TLS, database credentials, network segmentation, distribution cookies, backups, and product abuse rules stay outside the library.</p>
+
+<h2 id="the-authorizer-callback">The authorizer callback</h2>
+<pre><code class="language-elixir">defmodule MyApp.Auth do
+  @behaviour Wiregrid.Authorizer
+
+  @impl true
+  def authorize(action, session, resource, context) do
+    if MyApp.Policy.allow?(session.user_id, action, resource, context),
+      do: :ok,
+      else: {:error, :unauthorized}
+  end
+end
+
+Wiregrid.start_instance(:chat,
+  authorizer: MyApp.Auth,
+  security_mode: :strict
+)</code></pre>
+<p><code>authorize/4</code> receives the action, the session map, the resource (a topic, room, user id, or receipt id), and a context map. Return <code>:ok</code> or <code>true</code> to allow. Return <code>false</code> for <code>{:error, :unauthorized}</code>. Return <code>{:error, reason}</code> to propagate that error. Any other return becomes <code>{:error, :authorization_failed}</code>.</p>
+<p>The callback runs through <code>Wiregrid.Callback</code>. A crash or a thrown value fails closed as <code>{:error, :authorization_failed}</code>. A timeout is <code>{:error, :authorization_timeout}</code>. A full isolated queue is <code>{:error, :authorization_overloaded}</code>. <code>authorizer_mode</code> is <code>:inline</code> by default, with <code>callback_timeout_ms</code> of 100. Isolated mode uses <code>max_callback_pending</code>.</p>
+<p><code>Wiregrid.Authorizer.AllowAll</code> is the default module. <code>authorize_actor/6</code> skips the callback entirely when <code>session_id</code> is <code>nil</code>. That is the trusted in-process publish path: a node-local job with no acting session is not asked for permission. <code>authorize_direct/6</code> does the same when the option list is empty or <code>session_id</code> is <code>nil</code>. Internet-facing transports need a real authorizer. Cowboy refuses to upgrade a socket while the instance still uses AllowAll, unless <code>allow_permissive_authorizer: true</code> is set on the handler. <code>security_mode: :strict</code> refuses to boot at all when the authorizer is AllowAll (<code>:strict_security_requires_authorizer</code>). <code>Wiregrid.Authorizer.DenyAll</code> is the opposite module, for tests and for instances that should stay closed until a policy is installed.</p>
+<p>Actions you will see include <code>:publish</code>, <code>:publish_room</code>, <code>:read</code>, <code>:activity</code>, <code>:receipt</code>, <code>{:signal, kind}</code>, plus subscribe, join, and presence checks issued by the runtime. Restored resume edges are authorized again.</p>
+
+<h2 id="terms-tokens-and-logs">Terms, tokens, and logs</h2>
+<p>Untrusted strings are not converted to atoms. External Erlang terms go through <code>Wiregrid.SafeTerm</code>: <code>binary_to_term</code> with <code>:safe</code>, a byte limit, and compressed ETF rejected before decode. Storage and cache adapters use that codec for event blobs.</p>
+<p>Transport tokens from <code>issue_transport_token/3</code> and <code>verify_transport_token/3</code> are a versioned binary envelope: HMAC-SHA256, constant-time compare, expiry, audience binding via <code>transport_audience/1</code>, nonces, and key ids so a ring can rotate. Resume tokens are separate: random, stored as hashes, bound to one user, single use, and rotated by <code>resume_session/5</code>.</p>
+<p>Wiregrid does not export telemetry by itself. <code>prometheus_metrics/1</code> emits aggregate counters and gauges with a fixed schema and no labels taken from users, topics, or URLs. Logs are written to avoid message bodies, authorization headers, bearer tokens, database credentials, and webhook secrets.</p>
+
+<h2 id="network-edges">Network edges</h2>
+<p>The foreign gateway binds <code>{127, 0, 0, 1}</code> unless <code>ip:</code> says otherwise. <code>allow_anonymous: true</code> is accepted only for a loopback address: IPv4 127.0.0.0/8, IPv6 <code>::1</code>, and the IPv4-mapped loopback form the gateway recognizes. Any other bind with that flag raises at startup. The gateway does not speak TLS. Terminate TLS in front of it, or keep the socket on loopback, and pass <code>authenticate: fn user_id, token -&gt; :ok end</code> for anything you do not fully trust. Anonymous sessions are rejected when that function is absent and <code>allow_anonymous</code> is false.</p>
+<p>Cowboy authenticates before <code>websocket_init/1</code> creates a session. An <code>Origin</code> header is denied unless it is listed in <code>origin_allowlist</code>. Distribution and EPMD should stay on a private network. Cluster peers are trusted infrastructure.</p>
+<p>Webhooks re-resolve the destination on every attempt, refuse private and special-use ranges, connect to the validated address while keeping TLS hostname checks, ignore redirects, and sign the body. Enable them only with an allowlist. See the configuration chapter for the numeric caps.</p>
+
+<h2 id="before-production">Before production</h2>
+<p>Run <code>./scripts/verify.sh</code> on the OTP and Elixir pair you will deploy. Run the adapter integration tests for the stores you actually use. Load-test with the event sizes and fanout you expect; <code>scripts/load.sh</code> accepts <code>USERS</code>, <code>TOPICS</code>, and <code>MESSAGES</code>. Keep secrets out of the repository. Test restore of the durable store separately from the BEAM node. Report vulnerabilities through the path in <code>SECURITY.md</code>.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#the-authorizer-callback">The authorizer callback</a></li><li><a class="h2" href="#terms-tokens-and-logs">Terms, tokens, and logs</a></li><li><a class="h2" href="#network-edges">Network edges</a></li><li><a class="h2" href="#before-production">Before production</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

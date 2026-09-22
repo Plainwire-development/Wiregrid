@@ -1,0 +1,53 @@
+<p class="kicker">Backpressure</p>
+<h1>Delivery and acknowledgements</h1>
+<p>Fanout does not call <code>process_info/2</code> on each recipient. Each session has a counter Wiregrid maintains, and each durable send inserts a reservation <code>{session_id, delivery_id}</code> before the message is placed in the owner mailbox.</p>
+
+<h2>The envelope</h2>
+<pre><code class="language-elixir">receive do
+  {:"$wiregrid", envelope} ->
+    envelope.instance
+    envelope.session_id
+    envelope.delivery_id
+    envelope.topic
+    envelope.class
+    envelope.event
+    Wiregrid.ack(envelope.instance, envelope.session_id, envelope.delivery_id)
+end</code></pre>
+<p>The message is always the two-tuple <code>{:"$wiregrid", envelope}</code>. The map always has <code>instance</code>, <code>session_id</code>, <code>delivery_id</code>, <code>topic</code>, and <code>class</code> (<code>:durable</code> or <code>:ephemeral</code>). <code>context</code> is present only when the subscription or fanout supplied a non-empty context map. <code>delivery_format</code> chooses the body:</p>
+<ul>
+  <li><code>:term</code> adds <code>event</code></li>
+  <li><code>:encoded</code> adds <code>payload</code> (codec bytes)</li>
+  <li><code>:both</code> adds <code>event</code> and <code>payload</code></li>
+</ul>
+<p><code>Wiregrid.decode_payload/2</code> turns an encoded payload back into a term for the instance’s codec. <code>Wiregrid.Chat.ack/2</code> needs <code>session_id</code> and <code>delivery_id</code> on that map.</p>
+
+<h2>Soft queue and hard queue</h2>
+<p>Defaults are <code>soft_queue: 500</code> and <code>hard_queue: 2_000</code>. <code>soft_queue</code> must be strictly below <code>hard_queue</code> or startup returns <code>:soft_queue_must_be_below_hard_queue</code>.</p>
+<table>
+  <thead><tr><th>Pending</th><th>Ephemeral</th><th>Durable</th></tr></thead>
+  <tbody>
+    <tr><td>at or under the soft queue</td><td>sent</td><td>sent, reservation held</td></tr>
+    <tr><td>above soft, at or under hard</td><td>dropped, <code>:dropped_ephemeral</code> increments</td><td>sent, reservation held</td></tr>
+    <tr><td>above hard</td><td>dropped</td><td>not admitted, <code>:admission_rejections</code> increments, fanout reports <code>:overloaded</code> or <code>:evicted</code></td></tr>
+  </tbody>
+</table>
+<p>When the pending count already exceeds the hard queue, Wiregrid rolls the counter back and may isolate the owner. <code>slow_consumer_action</code> is <code>:disconnect</code> by default, or <code>:exit_owner</code>. Capacity for reservations is also globally capped by <code>max_delivery_reservations</code> (100,000 / 2,000,000 / 20,000,000 on the three profiles). A full table rejects the send before the mailbox grows.</p>
+
+<h2>Acknowledgements</h2>
+<pre><code class="language-elixir">{:ok, pending} = Wiregrid.ack(:chat, session_id, delivery_id)
+{:ok, %{acked: n, unknown: missing, pending: left}} =
+  Wiregrid.ack_many(:chat, session_id, ids)
+{:ok, pending} = Wiregrid.ack(:chat, session_id)
+count = Wiregrid.pending(:chat, session_id)</code></pre>
+<p><code>ack/3</code> takes one reservation and returns the new pending count, or <code>{:error, :unknown_delivery}</code>. <code>ack_many/3</code> accepts up to <code>max_batch_items</code> ids and reports how many were released. Unknown ids are listed; they are not an error for the whole call. <code>ack/2</code> acknowledges one of the session’s reservations, the first key in the table, and returns <code>{:ok, 0}</code> when none remain. Protocol adapters should call <code>ack/3</code> with the id from the envelope so the client and the server agree on which message was committed. <code>pending/2</code> returns <code>0</code> for an invalid session id or a missing instance.</p>
+<p>Do the application work, then ack. Acknowledging before the write commits tells Wiregrid the consumer is healthy while the data is still in flight. Grouped helpers <code>consume_delivery/3</code>, <code>consume_many_deliveries/3</code>, <code>consume_ordered_deliveries/3</code>, and <code>consume_projection/5</code> run a handler and acknowledge only what the handler committed. Failed items stay reserved.</p>
+
+<h2>Replay</h2>
+<pre><code class="language-elixir">{:ok, stats} = Wiregrid.replay_session(:chat, session_id, {:channel, "general"}, limit: 50)</code></pre>
+<p><code>replay_session/4</code> reads one bounded storage page and redelivers it through authorization and the same pressure rules. The returned resume cursor moves only past rows delivery accepted. A row that was refused for pressure is not skipped. Stats include <code>resume_cursor</code>, <code>next_cursor</code>, <code>delivered</code>, <code>dropped</code>, and <code>stopped</code>. Cowboy exposes this as the command <code>{:replay, stream, opts}</code>, and the router binds it to the socket’s session. The client cannot name another session id.</p>
+
+<h2>Request and reply</h2>
+<pre><code class="language-elixir">{:ok, _} = Wiregrid.request_session(:chat, from_session, to_session, event)
+context = Wiregrid.request_context(envelope)
+{:ok, _} = Wiregrid.reply(:chat, to_session, envelope, response)</code></pre>
+<p>Request and reply are ordinary deliveries with a context the callee can read. They use the same reservation model. There is no hidden side channel with different reliability.</p>

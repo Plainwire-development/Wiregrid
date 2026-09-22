@@ -1,0 +1,27 @@
+<p class="kicker">Gleam</p>
+<h1>Gleam bindings</h1>
+<p><code>bindings/gleam</code> targets Erlang and calls <code>wiregrid_api</code>. There is no Gleam runtime and no second copy of session state. Closed types cover topics, targets, presence, signals, delivery class, profiles, prepared handles, dispatch plans, and actors. Event bodies and metadata stay <code>Dynamic</code>, because Wiregrid does not own the product schema.</p>
+<pre><code class="language-shell">./scripts/check-gleam.sh</code></pre>
+<p>CI pins Gleam 1.18.1. <code>WIREGRID_REQUIRE_GLEAM=1</code> makes a missing compiler fail the check.</p>
+
+<h2>Types</h2>
+<pre><code class="language-gleam">pub type Topic {
+  User(String)
+  Channel(String)
+  Thread(String)
+  Room(String)
+  Game(String)
+  Document(String)
+  Custom(String, String)
+}
+
+pub type DeliveryClass { Durable Ephemeral }
+pub type Profile { Small Balanced Large }
+pub type Presence { Online Idle Dnd Invisible Offline CustomPresence(String) }</code></pre>
+<p><code>Signal</code> is <code>Ring</code>, <code>Accept</code>, <code>Decline</code>, <code>Cancel</code>, <code>Offer</code>, <code>Answer</code>, <code>IceCandidate</code>, <code>Leave</code>, <code>Reconnect</code>, <code>Membership</code>. <code>Target</code> is <code>TopicTarget</code>, <code>RoomTarget</code>, <code>UserTarget</code>, or <code>SessionTarget</code>. <code>FanoutStats</code> carries <code>sent</code>, <code>dropped</code>, <code>evicted</code>, <code>gone</code>, <code>excluded</code>, <code>overloaded</code>. <code>AckStats</code> carries <code>acked</code>, <code>unknown</code>, <code>pending</code>. <code>PresenceSnapshot</code> carries status, session count, metadata, and <code>updated_at_ms</code>. <code>ReplayStats</code> carries delivered, dropped, <code>complete_page</code>, cursors, and <code>stopped</code>. <code>Actor</code> is <code>instance</code>, <code>session_id</code>, and <code>user_id</code>.</p>
+
+<h2>Calls</h2>
+<p>Discovery: <code>version</code>, <code>protocol_version</code>, <code>foreign_protocol_version</code>, <code>c_abi_major</code>, <code>capabilities</code>, <code>describe</code>. Start with <code>start_instance</code> or <code>start_profile(name, Balanced)</code>. Connect with <code>connect</code>, <code>connect_encoded</code> (delivery format <code>encoded</code>), <code>connect_resumable</code>, <code>connect_resumable_encoded</code>, and <code>resume_session</code>. Actor forms are <code>connect_actor</code>, <code>connect_resumable_actor</code>, and <code>resume_actor</code>.</p>
+<p>Routing covers subscribe, unsubscribe, the many-forms, <code>sync_subscriptions</code>, <code>sync_topology</code>, <code>prepare</code>, <code>publish</code>, <code>publish_class</code>, <code>publish_prepared</code>, batch and multi-topic publish, room publish, user and session sends, <code>dispatch</code>, <code>dispatch_prepared</code>, <code>compile_dispatch</code>, and <code>dispatch_plan</code>. Actor helpers (<code>actor_publish</code>, <code>actor_subscribe</code>, <code>actor_set_presence</code>, <code>actor_join_room</code>, <code>actor_ack</code>, and the rest) inject the actor session through the Erlang FFI so the session id cannot be omitted by accident. They do not cache permissions.</p>
+<p><code>ack</code> and <code>ack_many</code> return results you can decode with <code>ack_stats</code>. <code>fanout_stats</code> decodes a publish result. <code>replay_session</code> is the bounded replay primitive. <code>replay_session_with_options</code> takes an explicit cursor, page size, class, or delivery topic.</p>
+<p>An encoded session keeps codec bytes on the envelope. Decode when the consumer has decided to handle the event. That is the same <code>delivery_format: :encoded</code> option the Elixir <code>connect/4</code> accepts.</p>

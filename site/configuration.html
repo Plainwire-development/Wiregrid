@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuration — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html" aria-current="page">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Reference</p>
+<h1>Configuration</h1>
+<p>An instance is configured at start. There is no required application environment. <code>Wiregrid.Config.build/1</code> rejects a non-keyword, a list longer than 128 entries, duplicate keys (<code>:invalid_options</code>), and unknown keys (<code>{:unknown_options, keys}</code>). The profile is applied first, then explicit options overwrite it.</p>
+<pre><code class="language-elixir">Wiregrid.start_instance(:chat, profile: :balanced, max_sessions: 4_000)</code></pre>
+
+<h2 id="profiles">Profiles</h2>
+<p><code>:small</code> is the conservative set for development and modest services. <code>:balanced</code> is the default and the usual production start. <code>:large</code> raises ceilings. It does not preallocate the tables, and it is not a separate scheduler mode. Any other profile atom is <code>{:invalid_profile, other}</code>.</p>
+<table>
+  <thead><tr><th>Key</th><th>:small</th><th>:balanced</th><th>:large</th></tr></thead>
+  <tbody>
+    <tr><td><code>max_sessions</code></td><td>10,000</td><td>100,000</td><td>1,000,000</td></tr>
+    <tr><td><code>max_sessions_per_owner</code></td><td>32</td><td>128</td><td>1,024</td></tr>
+    <tr><td><code>max_subscription_edges</code></td><td>100,000</td><td>2,000,000</td><td>20,000,000</td></tr>
+    <tr><td><code>max_room_edges</code></td><td>50,000</td><td>1,000,000</td><td>10,000,000</td></tr>
+    <tr><td><code>max_room_grace</code></td><td>50,000</td><td>1,000,000</td><td>10,000,000</td></tr>
+    <tr><td><code>max_room_states</code></td><td>50,000</td><td>1,000,000</td><td>10,000,000</td></tr>
+    <tr><td><code>max_presence_watch_edges</code></td><td>50,000</td><td>1,000,000</td><td>10,000,000</td></tr>
+    <tr><td><code>max_activity_entries</code></td><td>50,000</td><td>500,000</td><td>5,000,000</td></tr>
+    <tr><td><code>max_receipt_entries</code></td><td>100,000</td><td>1,000,000</td><td>10,000,000</td></tr>
+    <tr><td><code>max_rate_limit_buckets</code></td><td>100,000</td><td>1,000,000</td><td>5,000,000</td></tr>
+    <tr><td><code>max_cache_entries</code></td><td>25,000</td><td>250,000</td><td>2,000,000</td></tr>
+    <tr><td><code>max_resume_snapshots</code></td><td>10,000</td><td>100,000</td><td>1,000,000</td></tr>
+    <tr><td><code>max_delivery_reservations</code></td><td>100,000</td><td>2,000,000</td><td>20,000,000</td></tr>
+    <tr><td><code>max_cluster_dedupe</code></td><td>100,000</td><td>500,000</td><td>2,000,000</td></tr>
+    <tr><td><code>max_remote_presence</code></td><td>100,000</td><td>500,000</td><td>2,000,000</td></tr>
+    <tr><td><code>max_remote_room_edges</code></td><td>100,000</td><td>2,000,000</td><td>20,000,000</td></tr>
+    <tr><td><code>max_memory_events</code></td><td>250,000</td><td>1,000,000</td><td>5,000,000</td></tr>
+    <tr><td><code>max_expiry_entries</code></td><td>250,000</td><td>2,000,000</td><td>20,000,000</td></tr>
+    <tr><td><code>max_control_pending</code></td><td>2,000</td><td>20,000</td><td>100,000</td></tr>
+    <tr><td><code>max_callback_pending</code></td><td>256</td><td>2,048</td><td>8,192</td></tr>
+    <tr><td><code>max_adapter_pending</code></td><td>128</td><td>1,024</td><td>4,096</td></tr>
+    <tr><td><code>fanout_buckets</code></td><td>32</td><td>64</td><td>256</td></tr>
+  </tbody>
+</table>
+<p><code>fanout_buckets</code> must be a positive integer no greater than 1,024. Above that, startup returns <code>:fanout_buckets_too_large</code>.</p>
+
+<h2 id="base-keys">Base keys</h2>
+<p>These values apply on every profile unless an option overrides them. Positive-integer keys reject zero and negatives with <code>:invalid_limits</code>.</p>
+<table>
+  <thead><tr><th>Key</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>profile</code></td><td><code>:balanced</code></td></tr>
+    <tr><td><code>security_mode</code></td><td><code>:trusted</code> (<code>:strict</code> refuses <code>AllowAll</code>)</td></tr>
+    <tr><td><code>telemetry_metric_events</code></td><td><code>false</code></td></tr>
+    <tr><td><code>readiness_pressure_threshold</code></td><td><code>1.0</code> (number in <code>(0, 1]</code>)</td></tr>
+    <tr><td><code>control_call_timeout_ms</code></td><td>15,000</td></tr>
+    <tr><td><code>authorizer_mode</code></td><td><code>:inline</code> or <code>:isolated</code></td></tr>
+    <tr><td><code>callback_timeout_ms</code></td><td>100</td></tr>
+    <tr><td><code>adapter_mode</code></td><td><code>:inline</code> or <code>:isolated</code></td></tr>
+    <tr><td><code>adapter_timeout_ms</code></td><td>5,000</td></tr>
+    <tr><td><code>max_sessions_per_user</code></td><td>32</td></tr>
+    <tr><td><code>max_sessions_per_owner</code></td><td>128, then replaced by the profile</td></tr>
+    <tr><td><code>max_subscriptions_per_session</code></td><td>2,048</td></tr>
+    <tr><td><code>max_presence_watches_per_session</code></td><td>1,024</td></tr>
+    <tr><td><code>max_watchers_per_user</code></td><td>100,000</td></tr>
+    <tr><td><code>max_rooms_per_session</code></td><td>256</td></tr>
+    <tr><td><code>max_room_members</code></td><td>100,000</td></tr>
+    <tr><td><code>max_activities_per_session</code></td><td>512</td></tr>
+    <tr><td><code>max_receipts_per_session</code></td><td>2,048</td></tr>
+    <tr><td><code>max_topic_bytes</code></td><td>512</td></tr>
+    <tr><td><code>max_topic_depth</code></td><td>4</td></tr>
+    <tr><td><code>max_user_id_bytes</code></td><td>512</td></tr>
+    <tr><td><code>max_session_id_bytes</code></td><td>96</td></tr>
+    <tr><td><code>max_storage_id_bytes</code></td><td>256</td></tr>
+    <tr><td><code>max_metadata_bytes</code></td><td>16,384</td></tr>
+    <tr><td><code>max_event_bytes</code></td><td>1,048,576</td></tr>
+    <tr><td><code>max_encoded_event_bytes</code></td><td>1,572,864</td></tr>
+    <tr><td><code>max_cache_key_bytes</code></td><td>1,024</td></tr>
+    <tr><td><code>max_cache_value_bytes</code></td><td>1,048,576</td></tr>
+    <tr><td><code>max_rate_limit_key_bytes</code></td><td>1,024</td></tr>
+    <tr><td><code>max_websocket_frame_bytes</code></td><td>1,048,576</td></tr>
+    <tr><td><code>max_batch_items</code></td><td>512</td></tr>
+    <tr><td><code>max_batch_targets</code></td><td>4,096</td></tr>
+    <tr><td><code>max_query_results</code></td><td>10,000</td></tr>
+    <tr><td><code>soft_queue</code></td><td>500</td></tr>
+    <tr><td><code>hard_queue</code></td><td>2,000</td></tr>
+    <tr><td><code>fanout_buckets</code></td><td>64, then replaced by the profile</td></tr>
+    <tr><td><code>reconnect_grace_ms</code></td><td>15,000</td></tr>
+    <tr><td><code>resume_ttl_ms</code></td><td>120,000</td></tr>
+    <tr><td><code>activity_ttl_ms</code></td><td>5,000</td></tr>
+    <tr><td><code>receipt_ttl_ms</code></td><td>86,400,000</td></tr>
+    <tr><td><code>max_ttl_ms</code></td><td>604,800,000</td></tr>
+    <tr><td><code>expiry_tick_ms</code></td><td>100</td></tr>
+    <tr><td><code>expiry_batch_size</code></td><td>2,048</td></tr>
+    <tr><td><code>slow_consumer_action</code></td><td><code>:disconnect</code> or <code>:exit_owner</code></td></tr>
+    <tr><td><code>presence_aggregation</code></td><td><code>:priority</code> or <code>:latest</code></td></tr>
+    <tr><td><code>presence_priority</code></td><td><code>[:online, :dnd, :idle, :offline]</code></td></tr>
+    <tr><td><code>cluster</code></td><td><code>false</code></td></tr>
+    <tr><td><code>cluster_shards</code></td><td>16 (maximum 256)</td></tr>
+    <tr><td><code>cluster_namespace</code></td><td><code>:instance</code></td></tr>
+    <tr><td><code>cluster_dedupe_ttl_ms</code></td><td>60,000</td></tr>
+    <tr><td><code>cluster_pending_per_shard</code></td><td>10,000</td></tr>
+    <tr><td><code>authorizer</code></td><td><code>Wiregrid.Authorizer.AllowAll</code></td></tr>
+    <tr><td><code>codec</code></td><td><code>Wiregrid.Codec.Term</code></td></tr>
+    <tr><td><code>storage</code></td><td><code>{Wiregrid.Storage.Memory, []}</code></td></tr>
+    <tr><td><code>cache</code></td><td><code>{Wiregrid.Cache.Memory, []}</code></td></tr>
+    <tr><td><code>webhooks</code></td><td><code>[enabled: false]</code></td></tr>
+  </tbody>
+</table>
+<p><code>max_encoded_event_bytes</code> must be at least <code>max_event_bytes</code>. <code>activity_ttl_ms</code> and <code>receipt_ttl_ms</code> must be at most <code>max_ttl_ms</code>. <code>soft_queue</code> must be below <code>hard_queue</code>. <code>cluster_namespace</code> may be an atom, a non-negative integer, a binary of 1 to 128 bytes, or a tuple of 1 to 4 such parts.</p>
+
+<h2 id="chat-fa-ade-defaults">Chat façade defaults</h2>
+<p>Passed under <code>chat:</code> to <code>use Wiregrid.Chat</code> and checked by <code>Wiregrid.Chat.Config</code>. See the <a href="chat.html">chat façade</a> for the ceilings.</p>
+<table>
+  <thead><tr><th>Key</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>max_message_bytes</code></td><td>65,536</td></tr>
+    <tr><td><code>max_attachment_count</code></td><td>32</td></tr>
+    <tr><td><code>max_mention_count</code></td><td>100</td></tr>
+    <tr><td><code>max_reaction_bytes</code></td><td>64</td></tr>
+    <tr><td><code>max_client_nonce_bytes</code></td><td>128</td></tr>
+    <tr><td><code>max_chat_event_bytes</code></td><td>262,144</td></tr>
+    <tr><td><code>message_rate_limit</code></td><td><code>{30, 10_000}</code></td></tr>
+    <tr><td><code>activity_rate_limit</code></td><td><code>{60, 10_000}</code></td></tr>
+    <tr><td><code>allow_empty_messages_with_attachments</code></td><td><code>true</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="webhooks">Webhooks</h2>
+<p>Webhooks start disabled. <code>enabled: true</code> requires a non-empty <code>allowlist</code> of hostnames, each 1 to 253 bytes, at most 128 entries. Missing allowlist is <code>:webhook_allowlist_required</code>.</p>
+<table>
+  <thead><tr><th>Key</th><th>Hard maximum</th></tr></thead>
+  <tbody>
+    <tr><td><code>max_pending</code></td><td>1,000,000</td></tr>
+    <tr><td><code>max_concurrency</code></td><td>1,024</td></tr>
+    <tr><td><code>max_body_bytes</code></td><td>16,777,216</td></tr>
+    <tr><td><code>max_response_bytes</code></td><td>16,777,216</td></tr>
+    <tr><td><code>max_header_bytes</code></td><td>131,072</td></tr>
+    <tr><td><code>max_retries</code></td><td>0 to 20</td></tr>
+    <tr><td><code>base_backoff_ms</code></td><td>86,400,000, and not above <code>max_backoff_ms</code></td></tr>
+    <tr><td><code>max_backoff_ms</code></td><td>86,400,000</td></tr>
+    <tr><td><code>connect_timeout_ms</code></td><td>300,000</td></tr>
+    <tr><td><code>request_timeout_ms</code></td><td>300,000</td></tr>
+  </tbody>
+</table>
+<p>Call <code>Wiregrid.webhook(instance, url, body, opts)</code>. Destinations are resolved on every attempt. Private, link-local, loopback, and multicast targets are rejected. Redirects are not followed. Deliveries are signed.</p>
+
+<h2 id="rate-limits">Rate limits</h2>
+<pre><code class="language-elixir">{:ok, remaining} = Wiregrid.rate_limit(:chat, :login, ip, 30, 60_000)
+{:ok, remaining} = Wiregrid.rate_limit(:chat, :send, user_id, 20, 10_000,
+  policy: :token_bucket, burst: 20)</code></pre>
+<p>Policies are <code>:fixed_window</code> and <code>:token_bucket</code>. Option keys are <code>:policy</code>, <code>:burst</code>, and <code>:idle_ttl_ms</code>. The window must be positive and at most <code>max_ttl_ms</code>. The key <code>{bucket, key}</code> must fit in <code>max_rate_limit_key_bytes</code>. Bucket rows are capped by <code>max_rate_limit_buckets</code>. A full table or a refused call increments <code>:rate_limit_rejections</code>. Token buckets update one ETS row with compare-and-swap and do not schedule a timer per hit.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#profiles">Profiles</a></li><li><a class="h2" href="#base-keys">Base keys</a></li><li><a class="h2" href="#chat-fa-ade-defaults">Chat façade defaults</a></li><li><a class="h2" href="#webhooks">Webhooks</a></li><li><a class="h2" href="#rate-limits">Rate limits</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<p class="kicker">Internals</p>
+<h1>Architecture</h1>
+<p>Lifecycle work and fanout work are separate. <code>Wiregrid.Runtime</code> serializes changes that move several indexes together: sessions, subscriptions, rooms, presence watches, resume snapshots, and drain state. One runtime process per instance keeps those ETS updates ordered. Publishing does not enter that process. <code>Wiregrid.Fanout</code> reads the indexes and walks recipients in bounded batches, so a busy channel does not have to wait behind session setup.</p>
+
+<h2>Processes and tables</h2>
+<p><code>Wiregrid.Tables</code> owns the per-instance ETS tables and is the place <code>Wiregrid.Tables.get/1</code> reads config from. <code>Wiregrid.Delivery</code> owns reservations, acknowledgements, and the slow-consumer decision. <code>Wiregrid.Expiry</code> sweeps TTL rows on a tick (<code>expiry_tick_ms</code> 100, batches of <code>expiry_batch_size</code> 2,048) instead of a timer per row. <code>Wiregrid.Storage</code> and <code>Wiregrid.Cache</code> are the adapter boundaries. <code>Wiregrid.Cluster</code> is absent from the supervision tree when <code>cluster</code> is false.</p>
+<p>An instance supervisor uses <code>rest_for_one</code>. If the table owner dies, the runtime restarts against fresh tables. Restarting only the runtime rebuilds monitors and leaves the tables in place. The top-level application supervisor starts the instance dynamic supervisor and the task supervisor the gateway and isolated adapters use.</p>
+<p>Hot counters that fanout touches live in <code>src/wiregrid_hot.erl</code>, including the session pending counter delivery increments and rolls back. That module is a small C-free Erlang helper, not a NIF.</p>
+
+<h2>A publish, end to end</h2>
+<ol>
+  <li>Reject the call if the instance is missing or draining.</li>
+  <li>Validate options, the topic, and the event size.</li>
+  <li>Authorize when a session id is present. Skip the callback when it is <code>nil</code>.</li>
+  <li>Encode once with the configured codec (<code>Wiregrid.Codec.Term</code> unless replaced).</li>
+  <li>Append to storage when <code>persist</code> is true.</li>
+  <li>Fan out locally. Each recipient is <code>:sent</code>, <code>:dropped</code>, <code>:evicted</code>, <code>:gone</code>, <code>:excluded</code>, or <code>:overloaded</code>.</li>
+  <li>Forward to cluster shards when clustering is enabled for the call.</li>
+</ol>
+<p>The owner then receives <code>{:"$wiregrid", envelope}</code>. Durable class holds a reservation until ack. Ephemeral class may be dropped once <code>soft_queue</code> (500) is passed. Past <code>hard_queue</code> (2,000), durable admission stops. <code>Wiregrid.Chat.say/4</code> always takes the persist path for channel messages. <code>whisper/4</code> persists on <code>{:user, user_id}</code>.</p>
+<p>Prepared handles skip the encode on later calls. They are signed for one instance. Dispatch plans skip repeated target validation. Both are in-process values.</p>
+
+<h2>Adapters and callbacks</h2>
+<p>Inline mode calls the storage or cache module in the caller. Isolated mode wraps the call in a supervised task with <code>adapter_timeout_ms</code> and <code>max_adapter_pending</code>. Overflow is <code>{:error, :adapter_overloaded}</code>. The same isolation switch exists for the authorizer (<code>authorizer_mode</code>, <code>callback_timeout_ms</code>, <code>max_callback_pending</code>). Health includes those failures, timeouts, and rejections.</p>
+
+<h2>Where LFE sits</h2>
+<p>The LFE modules in <code>bindings/lfe</code> are workers, macros, and mailbox helpers on top of <code>wiregrid_api</code>. They do not own tables. Installing LFE does not create a second source of truth, and omitting it does not disable any Elixir API. See the <a href="lfe.html">LFE chapter</a> for which file does which job.</p>
+
+<h2>Clients outside the VM</h2>
+<p><code>Wiregrid.Foreign.Gateway</code> accepts TCP, runs <code>hello</code>, and attaches a normal session. From that point the connection process is an owner like any other: subscriptions, acks, presence, and pressure use the runtime. Frames are version 1 TLV, documented in the <a href="foreign.html">protocol chapter</a>. Cowboy is the same idea over WebSocket, with authentication moved to the HTTP upgrade. The browser kit is presentation only. It does not open a protocol Wiregrid would treat as trusted.</p>
+
+<h2>What a restart forgets</h2>
+<p>Memory storage, the memory cache, rate-limit buckets, delivery reservations, and presence are process-local. Postgres and Scylla keep the streams you persisted. Resume snapshots live until <code>resume_ttl_ms</code> or until the table owner restarts. Plan a durable adapter for history you cannot rebuild, and treat a node restart as a reason for clients to resume or reconnect rather than as a pause in an in-memory log.</p>

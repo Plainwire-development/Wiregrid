@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser UI kit — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html" aria-current="page">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Browser</p>
+<h1>Browser UI kit</h1>
+<p>The kit under <code>priv/ui</code> is CSS and small JavaScript modules. It does not own the socket, the store, the router, or the message schema. Public class names start with <code>wg-</code>. Utility classes start with <code>wg-u-</code>, so they can sit beside another utility set. Message text is written with <code>textContent</code>. There is no helper that assigns a message body to <code>innerHTML</code>.</p>
+
+<h2 id="install-paths">Install paths</h2>
+<pre><code class="language-shell">mix wiregrid.ui.install
+mix wiregrid.ui.install priv/static/vendor/wiregrid --force</code></pre>
+<p>The default destination is <code>priv/static/vendor/wiregrid</code>. Existing files are left in place unless <code>--force</code> is passed. The task copies the prebuilt bundle, the ESM bridge, and the CSS layers from the package’s <code>priv/ui</code>.</p>
+<p><code>scripts/install.sh</code> copies the same tree to <code>share/wiregrid/ui</code> under the prefix. A static page can load <code>wiregrid.css</code> and <code>wiregrid.js</code> from there. A bundler imports <code>wiregrid.esm.js</code>.</p>
+<pre><code class="language-css">@import "./wiregrid/wiregrid.css";
+
+:root {
+  --wg-accent: #7c8cff;
+  --wg-sidebar: 280px;
+  --wg-message-gap: 6px;
+}</code></pre>
+
+<h2 id="layers">Layers</h2>
+<ol>
+  <li><code>tokens.css</code></li>
+  <li><code>base.css</code></li>
+  <li><code>layout.css</code></li>
+  <li><code>components.css</code></li>
+  <li><code>chat.css</code></li>
+  <li><code>utilities.css</code></li>
+  <li><code>motion.css</code></li>
+</ol>
+<p><code>wiregrid.css</code> imports the full stack. Import the layers yourself when the application already has a reset. Themes use <code>data-wg-theme="dark"</code> and <code>data-wg-theme="light"</code> on a <code>wg-root</code> element. Density uses <code>data-wg-density="compact"</code>, <code>comfortable</code>, or <code>cozy</code>. Preset files such as midnight, soft, and plainwire are examples. A product theme should override tokens (<code>--wg-bg</code>, <code>--wg-panel</code>, <code>--wg-text</code>, <code>--wg-accent</code>, <code>--wg-sidebar</code>, <code>--wg-message-gap</code>, radii) and add component CSS only where the shape actually changes.</p>
+
+<h2 id="classes-you-will-use">Classes you will use</h2>
+<p>Layout: <code>wg-root</code>, <code>wg-app</code>, <code>wg-sidebar</code>, <code>wg-members</code>, <code>wg-main</code>, <code>wg-header</code>, <code>wg-pane</code>, <code>wg-stack</code>, <code>wg-inline</code>, <code>wg-split</code>, <code>wg-scroll</code>. Chrome: <code>wg-button</code> with <code>wg-button--primary</code>, <code>--danger</code>, <code>--ghost</code>, <code>--icon</code>, <code>--sm</code>, <code>--lg</code>; <code>wg-input</code>; <code>wg-nav-item</code>; <code>wg-title</code>. Chat: <code>wg-message</code>, <code>wg-reaction</code>, channel and member lists, replies, attachments, composers, typing rows, thread panels, unread separators. App pieces include menus, tabs, dialogs, banners, switches, toasts, and skeletons. <code>wg-sr-only</code> hides text visually and leaves it available to assistive tech. Interactive helpers use normal focusable elements. The motion layer follows <code>prefers-reduced-motion</code>.</p>
+
+<h2 id="javascript">JavaScript</h2>
+<pre><code class="language-js">import {
+  appendMessage,
+  bindChatActions,
+  bindComposer,
+  createOverlay,
+  createStore,
+  setTheme,
+  connectChat
+} from "./wiregrid/wiregrid.esm.js";</code></pre>
+<p><code>wiregrid.esm.js</code> re-exports <code>js/core.js</code>, <code>js/chat.js</code>, <code>js/composer.js</code>, <code>js/overlays.js</code>, <code>js/liveview.js</code>, and <code>js/client.js</code>. The global <code>wiregrid</code> object on the classic bundle exposes <code>version</code> (<code>"1.0.0"</code>), <code>createStore</code>, <code>setTheme</code>, <code>restoreTheme</code>, <code>setDensity</code>, <code>appendMessage</code>, <code>upsertMessage</code>, <code>bindChatActions</code>, <code>renderMessage</code>, <code>jumpToMessage</code>, <code>bindComposer</code> (also as <code>mountComposer</code>), <code>createOverlay</code>, <code>bindTabs</code>, <code>WiregridHooks</code>, and <code>connectChat</code>.</p>
+<p><code>appendMessage</code> and <code>upsertMessage</code> keep a bounded set of nodes. <code>trimTimeline</code> defaults to 2,000 retained messages. <code>bindComposer</code> handles enter-to-send, textarea growth, and a UTF-8 byte limit. <code>createOverlay</code> traps focus and restores it on close. <code>text()</code> in <code>core.js</code> creates an element and assigns <code>textContent</code>.</p>
+<p><code>connectChat(url, handlers)</code> speaks <code>Wiregrid.Transport.Protocol.JSON</code> over a WebSocket, using the same topic strings as the C gateway. Point Cowboy at that protocol and send text frames. <code>chat.html</code> is a static shell. Open it beside <code>wiregrid.css</code> and add <code>?socket=ws://127.0.0.1:PORT/chat</code> when a JSON socket is listening. The page subscribes to <code>general</code>, appends with <code>textContent</code>, and acks deliveries.</p>
+<p><code>js/liveview.js</code> exports <code>WiregridHooks</code> for the composer and delegated message actions. The hooks call <code>pushEvent</code>. They do not open a second socket.</p>
+<p>Message rows use <code>content-visibility</code> where the browser supports it. For a timeline that must keep tens of thousands of rows mounted, pair the CSS with a windowing library. Custom markup you build from classes alone still needs the application to supply labels, focus order, and live regions.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#install-paths">Install paths</a></li><li><a class="h2" href="#layers">Layers</a></li><li><a class="h2" href="#classes-you-will-use">Classes you will use</a></li><li><a class="h2" href="#javascript">JavaScript</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

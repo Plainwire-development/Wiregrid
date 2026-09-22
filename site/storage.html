@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Storage — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html" aria-current="page">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Adapters</p>
+<h1>Storage</h1>
+<p><code>Wiregrid.Storage</code> is an append-oriented stream interface. The behaviour requires <code>bootstrap/1</code>, <code>append/6</code>, <code>get/3</code>, <code>page/4</code>, <code>delete/3</code>, <code>prune/4</code>, and <code>health/1</code>. Streams are validated topics. Ids are binaries bounded by <code>max_storage_id_bytes</code> (256). A page is ordered by <code>(inserted_at_ms, id)</code> so two rows with the same millisecond are neither skipped nor repeated. The cursor is an opaque binary from <code>Wiregrid.Storage.Cursor</code>.</p>
+<p>The application chooses what is persisted. <code>publish(..., persist: true)</code> appends after validation and authorization and before local fanout. <code>Wiregrid.Chat.say/4</code> sets that flag. <code>Wiregrid.publish/4</code> leaves it to the caller.</p>
+<pre><code class="language-elixir">:ok = Wiregrid.storage_bootstrap(:chat)
+:ok = Wiregrid.append_event(:chat, {:channel, "general"}, id, event, %{})
+{:ok, row} = Wiregrid.get_event(:chat, {:channel, "general"}, id)
+{:ok, rows, cursor} = Wiregrid.page_events(:chat, {:channel, "general"}, nil, 100)
+{:ok, rows, cursor} = Wiregrid.read_history(:chat, session_id, {:channel, "general"}, nil, 50)
+:ok = Wiregrid.delete_event(:chat, {:channel, "general"}, id)
+{:ok, deleted} = Wiregrid.prune_events(:chat, {:channel, "general"}, before_ms, 1_000)</code></pre>
+<p><code>read_history/5</code> checks the <code>:read</code> authorizer action for that session, then pages. <code>page_events/4</code> is the in-process call for code that has already decided the caller may read. Default limits are 100 and 50 respectively. <code>prune_events/4</code> defaults the delete cap to 1,000.</p>
+<p>Adapter config is <code>{module, keyword}</code> or a module atom, which means <code>{module, []}</code>. The module must export the behaviour callbacks or startup fails with <code>{:invalid_module, :storage, module}</code>. Connections and pools belong to the host application. Wiregrid does not open them and does not store credentials.</p>
+
+<h2 id="memory">Memory</h2>
+<p>The default is <code>{Wiregrid.Storage.Memory, []}</code>. Rows live in a bounded ETS table, idempotent on <code>(stream, id)</code>. The cap is <code>max_memory_events</code>: 250,000 on <code>:small</code>, 1,000,000 on <code>:balanced</code>, 5,000,000 on <code>:large</code>. Memory storage is the right default for tests and for data you can rebuild. It is empty after the table owner restarts.</p>
+
+<h2 id="postgres">Postgres</h2>
+<pre><code class="language-elixir">storage: {Wiregrid.Storage.Postgres, conn: MyApp.Repo}</code></pre>
+<p>Pass a Postgrex-compatible connection or pool as <code>conn:</code>. <code>bootstrap/1</code> runs the idempotent statements from <code>priv/migrations/postgres/001_events.sql</code> inside one transaction, under a transaction-scoped advisory lock. The table is <code>wiregrid_events (stream, id, event, meta, inserted_at_ms)</code> with primary key <code>(stream, inserted_at_ms, id)</code> and a unique <code>(stream, id)</code>. Event and meta columns are bytea produced by <code>Wiregrid.SafeTerm</code>, capped at 16,777,216 bytes inside the adapter.</p>
+<pre><code class="language-shell">DATABASE_URL=... ./scripts/db-init.sh postgres</code></pre>
+<p>Integration tests accept an Ecto URL such as <code>ecto://wiregrid:wiregrid@127.0.0.1:5432/wiregrid</code> and pass Postgrex <code>hostname</code>, <code>port</code>, <code>username</code>, <code>password</code>, and <code>database</code>. Pool size, TLS, failover, backups, and retention policy stay with the operator. <code>prune/4</code> deletes a bounded number of rows older than a timestamp.</p>
+
+<h2 id="redis-is-a-cache">Redis is a cache</h2>
+<pre><code class="language-elixir">cache: {Wiregrid.Cache.Redis, conn: MyApp.Redix, prefix: "myapp:wg:"}
+:ok = Wiregrid.cache_put(:chat, "roster", term, 60_000)
+{:ok, term} = Wiregrid.cache_get(:chat, "roster")
+:ok = Wiregrid.cache_delete(:chat, "roster")
+{:ok, n} = Wiregrid.cache_incr(:chat, "views", 1, 60_000)</code></pre>
+<p>Redis does not store chat history. The cache behaviour is <code>get/2</code>, <code>put/4</code>, <code>delete/2</code>, <code>incr/4</code>, and <code>health/1</code>. The default in-process cache is <code>{Wiregrid.Cache.Memory, []}</code>, capped by <code>max_cache_entries</code>.</p>
+<p>The Redis prefix defaults to <code>"wg1:"</code>. It must be 1 to 128 bytes and must not contain CR, LF, or NUL. Wiregrid appends <code>i:</code> plus a 22-character URL-safe SHA-256 of the instance name, then <code>v:</code> for values and <code>c:</code> for counters. A put deletes the counter key in the same Lua script. An incr refuses a key that already holds a normal value. TTL is milliseconds; <code>:infinity</code> omits expiry. Values are SafeTerm blobs, decoded with a 16,777,216 byte cap. The public cache API does not forward arbitrary Redis commands. Key and value ceilings on the instance are <code>max_cache_key_bytes</code> (1,024) and <code>max_cache_value_bytes</code> (1,048,576).</p>
+
+<h2 id="scylla">Scylla</h2>
+<pre><code class="language-elixir">storage: {Wiregrid.Storage.Scylla,
+  conn: MyApp.Xandra,
+  keyspace: "wiregrid",
+  replication_factor: 3,
+  bucket_ms: 86_400_000
+}</code></pre>
+<p>Long streams are split into time buckets so one partition does not grow for the life of the channel. The default bucket is one day (86,400,000 ms). <code>bucket_ms</code> must be a positive integer no larger than 31 days. Changing it for existing data is a migration.</p>
+<p><code>bootstrap/1</code> runs three statements. The keyspace is created with <code>NetworkTopologyStrategy</code> and this tablet clause, which keeps a single-node or mixed-version cluster on the classic storage path:</p>
+<pre><code class="language-sql">CREATE KEYSPACE IF NOT EXISTS wiregrid
+  WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 3}
+  AND tablets = {'enabled': false}</code></pre>
+<p>Replication factor defaults to 3 and must be an integer from 1 to 16. Use 1 only for a disposable one-node dev cluster. The keyspace name is validated as an identifier of 1 to 48 characters because CQL cannot bind identifiers. The default name is <code>wiregrid</code>.</p>
+<p>Three tables follow:</p>
+<ul>
+  <li><code>wiregrid_events</code> — primary key <code>((stream, bucket), inserted_at_ms, id)</code>, clustering ascending.</li>
+  <li><code>wiregrid_event_lookup</code> — primary key <code>((stream, id))</code>, holding bucket, timestamp, event, and meta.</li>
+  <li><code>wiregrid_stream_buckets</code> — primary key <code>((stream), bucket)</code>, the directory <code>page/4</code> walks.</li>
+</ul>
+<p>The first write of an id is an LWT: <code>INSERT INTO wiregrid_event_lookup (...) VALUES (...) IF NOT EXISTS</code>. That row is the canonical copy. <code>append/6</code> then reads the lookup back and repairs the time-bucket row and the bucket directory from it, so a retry cannot invent a second timestamp. <code>get/3</code> uses the lookup. If the lookup exists and the bucket row does not, the read repairs the secondary row and still returns the canonical event.</p>
+<p>Xandra returns a <code>Xandra.Page</code> struct whose <code>:content</code> field is raw column values. Rows become string-key maps only when the page is enumerated. The adapter enumerates struct pages that carry <code>:columns</code> and <code>:content</code>, and it still accepts a plain <code>%{content: rows}</code> map used by tests. Queries are prepared. Bucket directory pages are 64 buckets wide. Event and meta blobs are capped at 16,777,216 bytes.</p>
+<pre><code class="language-shell">./scripts/db-init.sh scylla</code></pre>
+<p><code>SCYLLA_KEYSPACE</code> and <code>SCYLLA_REPLICATION_FACTOR</code> can render a validated copy without editing the migration. The integration test is tagged <code>:scylla_integration</code> only, and the default test helper excludes that tag. Point <code>WIREGRID_SCYLLA_NODE</code> at <code>host:port</code> (CI uses <code>127.0.0.1:9042</code>) and run <code>mix test --include scylla_integration test/integration/scylla_test.exs</code> with the compose file <code>compose.test.yml</code>.</p>
+
+<h2 id="isolation">Isolation</h2>
+<pre><code class="language-elixir">Wiregrid.start_instance(:chat,
+  adapter_mode: :isolated,
+  adapter_timeout_ms: 2_000,
+  max_adapter_pending: 512,
+  storage: {MyApp.Storage, []}
+)</code></pre>
+<p>The default <code>adapter_mode</code> is <code>:inline</code>, with <code>adapter_timeout_ms</code> 5,000. Isolated mode runs adapter calls as supervised tasks. When <code>max_adapter_pending</code> is full the call returns <code>{:error, :adapter_overloaded}</code>. Timeouts and crashes are counted. Profile defaults for that pending cap are 128, 1,024, and 4,096.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#memory">Memory</a></li><li><a class="h2" href="#postgres">Postgres</a></li><li><a class="h2" href="#redis-is-a-cache">Redis is a cache</a></li><li><a class="h2" href="#scylla">Scylla</a></li><li><a class="h2" href="#isolation">Isolation</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

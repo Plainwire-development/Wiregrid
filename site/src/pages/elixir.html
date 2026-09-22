@@ -1,0 +1,32 @@
+<p class="kicker">Elixir</p>
+<h1>Elixir API</h1>
+<p><code>Wiregrid</code> is the stable façade. Application code should call it, or <code>Wiregrid.Chat</code>, rather than ETS tables or internal process names. Results that can fail are tagged tuples. Session ids, resume tokens, prepared handles, dispatch plans, and cursors are opaque.</p>
+
+<h2>Discovery</h2>
+<pre><code class="language-elixir">Wiregrid.version()
+Wiregrid.protocol_version()          # 1
+Wiregrid.foreign_protocol_version()  # 1
+Wiregrid.c_abi_major()               # 1
+{:ok, caps} = Wiregrid.capabilities(:chat)
+Wiregrid.describe(:chat)
+Wiregrid.deployment_report(:chat)
+Wiregrid.limits(:chat)</code></pre>
+<p><code>version/0</code> reads the application vsn and falls back to <code>"1.0.0"</code>. <code>capabilities/1</code> returns the feature list from <code>Wiregrid.Info</code> plus flags for cluster, webhooks, external storage, external cache, telemetry events, and isolated adapters. <code>describe/1</code> adds public limits, health, and bounded statistics. Query helpers (<code>session/2</code>, <code>topic_info/3</code>, <code>room_info/3</code>, <code>user_info/3</code>, <code>session_state/3</code>, and the count functions) omit owner pids, monitors, resume hashes, adapter secrets, and table identifiers. List results stop at <code>max_query_results</code> (10,000) unless the caller passes a smaller limit.</p>
+
+<h2>Lifecycle and routing</h2>
+<p>Lifecycle: <code>start_instance/2</code>, <code>instance_child_spec/2</code>, <code>stop_instance/1</code>, <code>connect/4</code>, <code>connect_resumable/4</code>, <code>resume_session/5</code>, the actor variants, <code>disconnect/3</code>, <code>disconnect_user/3</code>, <code>set_session_metadata/3</code>.</p>
+<p>Subscriptions: <code>subscribe/4</code>, <code>unsubscribe/3</code>, the <code>_many</code> forms, <code>sync_subscriptions/4</code>, <code>sync_topology/4</code>.</p>
+<p>Publish: <code>prepare/2</code>, <code>publish/4</code>, <code>publish_prepared/4</code>, <code>publish_batch/4</code>, <code>publish_topics/4</code>, <code>publish_topics_prepared/4</code>, <code>publish_room/4</code>, <code>publish_room_prepared/4</code>, <code>publish_rooms/4</code>, <code>publish_rooms_prepared/4</code>, <code>send_user/4</code>, <code>send_user_prepared/4</code>, <code>send_users/4</code>, <code>send_users_prepared/4</code>, <code>send_session/4</code>, <code>send_session_prepared/4</code>, <code>send_sessions/4</code>, <code>send_sessions_prepared/4</code>, <code>dispatch/4</code>, <code>dispatch_prepared/4</code>, <code>compile_dispatch/2</code>, <code>dispatch_plan/4</code>, <code>dispatch_plan_prepared/4</code>.</p>
+
+<h2>Delivery, presence, storage, ops</h2>
+<p>Delivery: <code>ack/2</code>, <code>ack/3</code>, <code>ack_many/3</code>, <code>pending/2</code>, <code>consume_delivery/3</code>, <code>consume_many_deliveries/3</code>, <code>consume_ordered_deliveries/3</code>, <code>consume_projection/5</code>, <code>request_session/5</code>, <code>reply/5</code>, <code>request_context/1</code>, <code>replay_session/4</code>, <code>decode_payload/2</code>.</p>
+<p>Presence and rooms: <code>set_presence/4</code>, <code>set_status/3</code>, <code>presence/2</code>, watch and unwatch (single and many), <code>sync_presence_watches/4</code>, <code>join_room/4</code>, <code>leave_room/3</code>, <code>join_rooms/4</code>, <code>leave_rooms/3</code>, <code>sync_rooms/4</code>, <code>resume_room/4</code>, <code>room_members/3</code>, <code>room_metadata/2</code>, <code>set_room_metadata/5</code>, <code>set_room_ttl/4</code>, <code>activity/6</code>, <code>activities/4</code>, <code>typing/4</code>, <code>receipt/4</code>, <code>get_receipt/3</code>, <code>signal/6</code>.</p>
+<p>Storage and cache: <code>storage_bootstrap/1</code>, <code>storage_health/1</code>, <code>append_event/5</code>, <code>get_event/3</code>, <code>page_events/4</code>, <code>read_history/5</code>, <code>delete_event/3</code>, <code>prune_events/4</code>, <code>cache_get/2</code>, <code>cache_put/4</code>, <code>cache_delete/2</code>, <code>cache_incr/4</code>, <code>cache_health/1</code>.</p>
+<p>Operations: <code>health/1</code>, <code>readiness/1</code>, <code>readiness_report/1</code>, <code>liveness/1</code>, <code>stats/1</code>, <code>pressure/1</code>, <code>prometheus_metrics/1</code>, <code>drain/1</code>, <code>undrain/1</code>, <code>await_idle/2</code>, <code>graceful_shutdown/2</code>, <code>rate_limit/5</code>, <code>rate_limit/6</code>, <code>webhook/4</code>, <code>issue_transport_token/3</code>, <code>verify_transport_token/3</code>.</p>
+
+<h2>Counts</h2>
+<pre><code class="language-elixir">Wiregrid.topic_subscriber_count(:chat, {:channel, "general"})
+Wiregrid.room_member_count(:chat, "lobby")
+Wiregrid.presence_watcher_count(:chat, "alice")
+Wiregrid.user_session_count(:chat, "alice")</code></pre>
+<p>Hot consumers can use <code>Wiregrid.Consumer.Worker</code> with <code>collect_wait_ms</code> from 0 to 50. The worker collects up to its configured burst from its own mailbox and still acknowledges through <code>Wiregrid.ack</code>. It does not become an unbounded queue in front of the runtime.</p>

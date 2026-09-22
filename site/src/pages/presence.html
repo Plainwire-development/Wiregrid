@@ -1,0 +1,44 @@
+<p class="kicker">Presence</p>
+<h1>Presence, rooms, signals, typing, receipts</h1>
+<p>These features share the session and the authorizer. They do not introduce a second routing table. Ephemeral broadcasts (typing, activity) can be dropped at the soft queue. Signals published as durable room events follow the durable rules.</p>
+
+<h2>Presence</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.set_presence(:chat, session_id, :online, %{})
+:ok = Wiregrid.set_status(:chat, session_id, :idle)
+snapshot = Wiregrid.presence(:chat, "alice")
+:ok = Wiregrid.watch_presence(:chat, session_id, "bob")
+:ok = Wiregrid.unwatch_presence(:chat, session_id, "bob")</code></pre>
+<p>Built-in statuses are <code>:online</code>, <code>:idle</code>, <code>:dnd</code>, <code>:invisible</code>, and <code>:offline</code>. A custom status is <code>{:custom, binary}</code> with 1 to 64 bytes. Anything else is <code>{:error, :invalid_presence_status}</code>.</p>
+<p><code>presence/2</code> returns <code>%{status:, sessions:, metadata:, updated_at_ms:}</code>. With no sessions the status is <code>:offline</code>, <code>sessions</code> is 0, metadata is <code>%{}</code>, and <code>updated_at_ms</code> is 0. <code>:offline</code> and <code>:invisible</code> are omitted from the visible set before aggregation.</p>
+<p><code>presence_aggregation</code> defaults to <code>:priority</code>. <code>presence_priority</code> defaults to <code>[:online, :dnd, :idle, :offline]</code>. Earlier entries win. The list must be non-empty, unique, and at most 32 entries. Each entry is one of <code>:online</code>, <code>:dnd</code>, <code>:idle</code>, <code>:offline</code>, or a custom tuple. <code>:latest</code> selects by timestamp instead. A bad list fails startup with <code>:invalid_presence_priority</code>.</p>
+<p>Watch caps: <code>max_presence_watches_per_session</code> is 1,024 and <code>max_watchers_per_user</code> is 100,000. Those two are base keys, not profile keys. The global edge table is <code>max_presence_watch_edges</code>, which the profile does set (50,000 / 1,000,000 / 10,000,000).</p>
+
+<h2>Rooms</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.join_room(:chat, "lobby", session_id)
+:ok = Wiregrid.leave_room(:chat, "lobby", session_id)
+{:ok, members} = Wiregrid.room_members(:chat, "lobby", 100)
+:ok = Wiregrid.set_room_metadata(:chat, "lobby", session_id, %{topic: "stand-up"})
+:ok = Wiregrid.set_room_ttl(:chat, "lobby", session_id, 60_000)</code></pre>
+<p>A room id is a topic-shaped term checked with <code>max_topic_bytes</code> and <code>max_topic_depth</code>. Chat code that wants the tuple <code>{:room, id}</code> should pass that tuple; <code>Wiregrid.Chat.room_topic/1</code> builds it. <code>join_room/4</code> on the low-level API takes the room term and the session id, in that order.</p>
+<p>Per-session membership is capped by <code>max_rooms_per_session</code> (256). A single room is capped by <code>max_room_members</code> (100,000). Global edges, grace entries, and room-state rows are profile limits: <code>max_room_edges</code>, <code>max_room_grace</code>, and <code>max_room_states</code>. Grace holds membership across <code>reconnect_grace_ms</code> so a resume can reclaim the seat.</p>
+<p><code>room_members/3</code> defaults the limit to 10,000. <code>room_metadata/2</code> and <code>room_info/3</code> are the read side. Metadata writes and TTL changes go through the runtime and the authorizer as the acting session. Room metadata is local; a cluster does not merge maps from two nodes into one document. The latest trusted cluster update is what a node keeps.</p>
+<p><code>sync_rooms/4</code> replaces the session’s room set. <code>resume_room/4</code> moves one edge from an old session id to a new one.</p>
+
+<h2>Signals</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.signal(:chat, "lobby", session_id, :offer, %{sdp: sdp})
+:ok = Wiregrid.signal(:chat, "lobby", session_id, :ice_candidate, candidate, include_sender: true)</code></pre>
+<p>The sender must already be a member of the room. Otherwise the result is <code>{:error, :not_room_member}</code>. Kinds are <code>:ring</code>, <code>:accept</code>, <code>:decline</code>, <code>:cancel</code>, <code>:offer</code>, <code>:answer</code>, <code>:ice_candidate</code>, <code>:leave</code>, <code>:reconnect</code>, and <code>:membership</code>. The payload is validated as an event against <code>max_metadata_bytes</code> (16,384), not against <code>max_event_bytes</code>.</p>
+<p>The published event is <code>%{type: :signal, signal: kind, from_user_id:, from_session_id:, payload:}</code>. It is sent with <code>publish_room/4</code>, <code>class: :durable</code>, <code>cluster: true</code>, and the sender excluded unless <code>include_sender: true</code>. The authorizer action is <code>{:signal, kind}</code>. The only option key is <code>:include_sender</code>.</p>
+
+<h2>Typing and other activity</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.typing(:chat, session_id, {:channel, "general"})
+:ok = Wiregrid.activity(:chat, session_id, {:channel, "general"}, :cursor, %{pos: 12},
+  ttl_ms: 5_000, broadcast: true)
+{:ok, rows} = Wiregrid.activities(:chat, {:channel, "general"}, :typing, 100)</code></pre>
+<p><code>typing/4</code> stores kind <code>:typing</code> with value <code>true</code> and sets <code>broadcast: true</code> unless the caller already passed that option. Activity options are <code>:ttl_ms</code> and <code>:broadcast</code>. The default TTL is <code>activity_ttl_ms</code> (5,000) and cannot exceed <code>max_ttl_ms</code> (604,800,000, seven days). A broadcast publishes <code>%{type: :activity, kind:, user_id:, value:}</code> as ephemeral, excludes the sender, and asks the cluster to forward it. The authorizer action is <code>:activity</code>.</p>
+<p>Per session, <code>max_activities_per_session</code> is 512. The global table is the profile’s <code>max_activity_entries</code>. <code>activities/4</code> lists one topic and kind, default limit 100. Chat’s <code>typing/3</code> is a different call: it publishes a <code>%{type: :typing, active: boolean}</code> chat event and spends the chat activity rate limit. Use one of them consistently so clients see one shape.</p>
+
+<h2>Receipts</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.receipt(:chat, session_id, %{id: "r1", message_id: "m1", status: "read"})
+{:ok, receipt} = Wiregrid.get_receipt(:chat, session_id, "r1")</code></pre>
+<p>A receipt is a map with an id. Options are <code>:ttl_ms</code> and <code>:persist</code>. The default TTL is <code>receipt_ttl_ms</code> (86,400,000, one day). <code>persist</code> defaults to false; when true, the receipt is appended on the user stream <code>{:user, user_id}</code>. The authorizer action is <code>:receipt</code>. Caps are <code>max_receipts_per_session</code> (2,048) and the profile’s <code>max_receipt_entries</code>. Chat’s <code>mark_read/3</code> does not write this table. It publishes an ephemeral <code>%{type: :read}</code> event on the channel.</p>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Erlang API — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html" aria-current="page">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Erlang</p>
+<h1>Erlang API</h1>
+<p><code>src/wiregrid_api.erl</code> is the plain-term boundary. Callers do not build Elixir structs, expand macros, or guess keyword defaults. Every option-bearing function has an explicit arity. New BEAM bindings should target this module. Gleam and LFE already do.</p>
+<pre><code class="language-erlang">{ok, _} = wiregrid_api:start_instance(chat),
+{ok, Sid} = wiregrid_api:connect(chat, &lt;&lt;"alice"&gt;&gt;, self()),
+Topic = wiregrid_api:topic_channel(&lt;&lt;"general"&gt;&gt;),
+ok = wiregrid_api:subscribe(chat, Sid, Topic),
+{ok, _} = wiregrid_api:publish(chat, Topic, #{type =&gt; message}).</code></pre>
+<p>Deliveries use the same mailbox tuple, <code>{'$wiregrid', Envelope}</code>. Acknowledge with <code>wiregrid_api:ack(Name, Session, DeliveryId)</code>. <code>ack/2</code> releases one reservation for the session, matching <code>Wiregrid.ack/2</code>.</p>
+
+<h2 id="constructors">Constructors</h2>
+<table>
+  <thead><tr><th>Function</th><th>Term</th></tr></thead>
+  <tbody>
+    <tr><td><code>topic_user/1</code></td><td><code>{user, Id}</code></td></tr>
+    <tr><td><code>topic_channel/1</code></td><td><code>{channel, Id}</code></td></tr>
+    <tr><td><code>topic_thread/1</code></td><td><code>{thread, Id}</code></td></tr>
+    <tr><td><code>topic_room/1</code></td><td><code>{room, Id}</code></td></tr>
+    <tr><td><code>topic_game/1</code></td><td><code>{game, Id}</code></td></tr>
+    <tr><td><code>topic_document/1</code></td><td><code>{document, Id}</code></td></tr>
+    <tr><td><code>topic_custom/2</code></td><td><code>{custom, Namespace, Value}</code></td></tr>
+    <tr><td><code>target_topic/1</code></td><td><code>{topic, Topic}</code></td></tr>
+    <tr><td><code>target_room/1</code></td><td><code>{room, Topic}</code></td></tr>
+    <tr><td><code>target_user/1</code></td><td><code>{user, UserId}</code></td></tr>
+    <tr><td><code>target_session/1</code></td><td><code>{session, SessionId}</code></td></tr>
+  </tbody>
+</table>
+<p><code>presence_status/1</code> and <code>presence_custom/1</code> build status terms. <code>signal_kind/1</code> checks a signal kind before <code>signal/5</code> or <code>signal/6</code>.</p>
+
+<h2 id="what-is-exported">What is exported</h2>
+<p>The export list mirrors the Elixir façade: version and capability calls (<code>version/0</code>, <code>protocol_version/0</code>, <code>foreign_protocol_version/0</code>, <code>c_abi_major/0</code>, <code>capabilities/1</code>, <code>describe/1</code>, <code>deployment_report/1</code>), instance start and stop, connect and resume, subscribe and <code>sync_topology/3,4</code>, prepare and every publish/send variant, dispatch and dispatch plans, ack and pending, presence, rooms, activity, typing, receipts, signal, rate limit, webhook, replay, storage, cache, the query functions (<code>session/2</code>, <code>limits/1</code>, <code>subscribed/3</code>, <code>room_member/3</code>, the counts), health, drain, <code>await_idle/1,2</code>, and <code>graceful_shutdown/1,2</code>.</p>
+<p>Option lists are plain proplists, the same keys documented for Elixir: <code>{profile, balanced}</code>, <code>{persist, true}</code>, <code>{class, ephemeral}</code>, <code>{session_id, Sid}</code>. Prepared handles stay opaque and instance-local.</p>
+
+<h2 id="replay">Replay</h2>
+<pre><code class="language-erlang">{ok, Stats} = wiregrid_api:replay_session(chat, Sid, Topic),
+{ok, Stats} = wiregrid_api:replay_session(chat, Sid, Topic, [{limit, 50}]).</code></pre>
+<p>One call reads one bounded storage page and sends it to a live session through normal authorization and delivery pressure. The map includes <code>resume_cursor</code>, <code>next_cursor</code>, <code>delivered</code>, <code>dropped</code>, and <code>stopped</code>.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#constructors">Constructors</a></li><li><a class="h2" href="#what-is-exported">What is exported</a></li><li><a class="h2" href="#replay">Replay</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

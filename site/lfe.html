@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LFE — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html" aria-current="page">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">LFE</p>
+<h1>LFE bindings</h1>
+<p>LFE is optional. Elixir and Erlang own sessions, ETS, resume tokens, storage rules, authorization, and delivery reservations. LFE calls <code>wiregrid_api</code>. The node boots with no LFE compiler installed. Compile the bindings with <code>mix wiregrid.lfe.compile</code> or <code>./scripts/check-lfe.sh</code>. Release builds that require LFE should set <code>WIREGRID_REQUIRE_LFE=1</code>. CI builds LFE 2.2.2.</p>
+<p>The sources are split by job. A lane that preserves per-key order has different failure rules from a coalesce step that may drop superseded typing events, and both differ from a macro that emits fixed topic constructors. One module would hide those rules.</p>
+
+<h2 id="modules">Modules</h2>
+<table>
+  <thead><tr><th>File</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><code>wiregrid.lfe</code></td><td>The usual API: lifecycle, subscriptions, publish, direct delivery, rooms, presence, signals, receipts, storage, cache, health, drain, shutdown</td></tr>
+    <tr><td><code>wiregrid_macros.lfe</code></td><td>Compile-time helpers for fixed topics, targets, publishers, subscription sets, workers, and command handlers. Generated functions call <code>wiregrid_api</code></td></tr>
+    <tr><td><code>wiregrid_fast.lfe</code></td><td>Prepared and grouped operations</td></tr>
+    <tr><td><code>wiregrid_mailbox.lfe</code></td><td>One bounded burst from the worker’s own mailbox. The collect wait is bounded. It does not scan another process</td></tr>
+    <tr><td><code>wiregrid_worker.lfe</code>, <code>wiregrid_batch_worker.lfe</code>, <code>wiregrid_adaptive_worker.lfe</code></td><td>Worker processes with off-heap queues and hard batch limits. The adaptive worker inspects its own mailbox after the first delivery</td></tr>
+    <tr><td><code>wiregrid_lane.lfe</code></td><td>Order inside a key (a session or a topic) while other keys run, under a hard lane cap</td></tr>
+    <tr><td><code>wiregrid_coalesce.lfe</code></td><td>Drops superseded ephemeral work inside one batch. Durable deliveries are kept</td></tr>
+    <tr><td><code>wiregrid_kernel.lfe</code>, <code>wiregrid_selector.lfe</code></td><td>Route or drop from envelope metadata before the payload is decoded</td></tr>
+    <tr><td><code>wiregrid_pipeline.lfe</code></td><td>Decode-once handler pipelines</td></tr>
+    <tr><td><code>wiregrid_fold.lfe</code></td><td>Stateful bounded folds</td></tr>
+    <tr><td><code>wiregrid_stream.lfe</code></td><td>Chunk orchestration when the caller has more work than one public batch</td></tr>
+  </tbody>
+</table>
+<p>None of these modules keep a second queue of record. Delivery ids still come from Wiregrid. Successful work is acknowledged through Wiregrid. Unprocessed deliveries stay reserved.</p>
+<p>Further modules in the same directory stay on that boundary:</p>
+<ul>
+  <li><code>wiregrid_actor.lfe</code> is a session-bound convenience API. It caches no permissions. Publish helpers inject <code>session_id</code> and reject a caller-supplied override.</li>
+  <li><code>wiregrid_policy.lfe</code> is pure helpers for macro-compiled authorizers. It does not call back into Wiregrid, so an authorizer cannot deadlock the control plane.</li>
+  <li><code>wiregrid_flow.lfe</code> composes coalesce and lanes. Durable envelopes are not coalesced.</li>
+  <li><code>wiregrid_plan.lfe</code> keeps a dispatch plan with its target set and recompiles once if an instance restart invalidates the plan.</li>
+  <li><code>wiregrid_projection.lfe</code> is the LFE face of commit-before-ack projections implemented in <code>Wiregrid.Consumer</code>.</li>
+  <li><code>wiregrid_router.lfe</code> routes on envelope metadata and decodes after a route is chosen. <code>handle-event/4</code> does not ack by itself.</li>
+  <li><code>wiregrid_transport.lfe</code> reads the sanitized command-handler context (<code>instance</code>, <code>session_id</code>, <code>user_id</code>).</li>
+</ul>
+
+<h2 id="prepared-publish">Prepared publish</h2>
+<pre><code class="language-lfe">(case (wiregrid:prepare 'chat event)
+  ((tuple 'ok prepared)
+    (wiregrid:publish-topics-prepared
+      'chat
+      (list (wiregrid:topic-channel #"general")
+            (wiregrid:topic-document #"activity"))
+      prepared)))</code></pre>
+<p>For topology known at compile time, <code>wiregrid_macros</code> can emit ordinary functions with the topic terms baked in. <code>wiregrid:replay-session/3,4</code> reads one storage page and redelivers it under the same authorization and backpressure rules. The resume cursor advances only past rows delivery accepted.</p>
+<p>Use lanes when order matters inside one key. Use coalesce for ephemeral typing or cursor updates inside the current batch. If the hot path is database latency, an LFE mailbox loop will not shorten that wait. Profile first, and keep an ordinary Elixir consumer when it is fast enough.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#modules">Modules</a></li><li><a class="h2" href="#prepared-publish">Prepared publish</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

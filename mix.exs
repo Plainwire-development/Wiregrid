@@ -46,7 +46,10 @@ defmodule Wiregrid.MixProject do
       {:postgrex, "~> 0.22.4", only: :test},
       {:redix, "~> 1.9", only: :test},
       {:xandra, "~> 0.19.4", only: :test},
-      {:cowboy, "~> 2.19", only: :test},
+      # Cowboy 2.19 pulls Cowlib 2.20, whose `maybe` syntax does not compile on
+      # OTP 26. 2.18 plus Cowlib 2.19 keeps the Elixir 1.17 / OTP 26 job green.
+      {:cowboy, "~> 2.18.0", only: :test},
+      {:cowlib, "~> 2.19.0", only: :test, override: true},
       {:stream_data, "~> 1.4", only: :test}
     ]
   end
@@ -59,7 +62,7 @@ defmodule Wiregrid.MixProject do
     [
       licenses: ["Apache-2.0"],
       files:
-        ~w(lib src priv bindings native config examples scripts docs mix.exs README.md LICENSE SECURITY.md CHANGELOG.md CONTRIBUTING.md)
+        ~w(lib src priv bindings native config examples scripts docs site mix.exs README.md LICENSE SECURITY.md CHANGELOG.md CONTRIBUTING.md)
     ]
   end
 end

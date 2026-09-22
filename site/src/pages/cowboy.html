@@ -1,0 +1,57 @@
+<p class="kicker">Transport</p>
+<h1>Cowboy transport</h1>
+<p><code>Wiregrid.Transport.Cowboy</code> is an optional WebSocket handler. The host application supplies Cowboy. Wiregrid’s own <code>mix.exs</code> lists Cowboy only under <code>only: :test</code>, pinned to <code>~&gt; 2.18.0</code> with Cowlib <code>~&gt; 2.19.0</code> so OTP 26 can compile the suite. Production apps add the Cowboy version they run.</p>
+<p>Authentication runs in <code>init/2</code>, before the upgrade. The session is created in <code>websocket_init/1</code>, so the Cowboy process is the session owner. On terminate, a live session is disconnected with reason <code>:transport_closed</code>.</p>
+
+<h2>Options</h2>
+<table>
+  <thead><tr><th>Key</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>:instance</code></td><td>required</td></tr>
+    <tr><td><code>:auth</code> / <code>:auth_fun</code></td><td>how the request becomes a user id</td></tr>
+    <tr><td><code>:protocol</code></td><td><code>Wiregrid.Transport.Protocol.Term</code></td></tr>
+    <tr><td><code>:origin_allowlist</code></td><td><code>[]</code>. A present <code>Origin</code> must match exactly</td></tr>
+    <tr><td><code>:max_frame_size</code></td><td><code>max_websocket_frame_bytes</code> (1,048,576)</td></tr>
+    <tr><td><code>:idle_timeout</code></td><td>60,000 ms, passed through to Cowboy</td></tr>
+    <tr><td><code>:ack_strategy</code></td><td><code>:client</code> or <code>:transport</code></td></tr>
+    <tr><td><code>:connect_opts</code></td><td><code>[]</code>. Allowed keys: <code>:metadata</code>, <code>:status</code>, <code>:presence_metadata</code></td></tr>
+    <tr><td><code>:auth_rate_limit</code></td><td>30</td></tr>
+    <tr><td><code>:auth_window_ms</code></td><td>60,000</td></tr>
+    <tr><td><code>:auth_rate_policy</code></td><td><code>:fixed_window</code></td></tr>
+    <tr><td><code>:auth_rate_burst</code></td><td>the limit, used when the policy is <code>:token_bucket</code></td></tr>
+    <tr><td><code>:frame_rate_limit</code></td><td>240 (range 1..100,000)</td></tr>
+    <tr><td><code>:frame_window_ms</code></td><td>60,000 (range 100..3,600,000)</td></tr>
+    <tr><td><code>:frame_rate_policy</code></td><td><code>:token_bucket</code></td></tr>
+    <tr><td><code>:frame_rate_burst</code></td><td>the frame limit</td></tr>
+    <tr><td><code>:allow_permissive_authorizer</code></td><td><code>false</code>. AllowAll is rejected unless this is <code>true</code></td></tr>
+    <tr><td><code>:command_handler</code></td><td><code>nil</code>. A 2-arity function or a module with <code>handle_command/2</code></td></tr>
+  </tbody>
+</table>
+<p>Unknown keys fail validation and the handshake is rejected. A failed init returns HTTP 401, or 400 when the option list itself is unusable. <code>:client</code> ack strategy connects the session with <code>ack_mode: :manual</code>. <code>:transport</code> uses <code>ack_mode: :transport</code> and acknowledges only after the handler has encoded the outbound frame. JSON protocol forces text frames and <code>delivery_format: :term</code>. The term protocol uses binary frames and <code>delivery_format: :encoded</code>. A text frame on the term protocol is <code>:binary_frames_required</code>.</p>
+<p>Pre-auth limiting is keyed by peer IP under the bucket <code>:websocket_auth</code>. Authenticated frames use the frame limiter. A limited frame returns <code>{:error, nil, :rate_limited}</code>. If the limiter itself is unavailable, the socket stops.</p>
+
+<h2>Handshake result</h2>
+<p>A new socket calls <code>connect_resumable/4</code>. A request that already carries a resume token calls <code>resume_session/5</code>. The first outbound message is <code>{:ready, %{session_id:, resume_token:, restored:}}</code>. Connect failure stops the socket with <code>{:connect_failed, reason}</code>.</p>
+
+<h2>Commands</h2>
+<p><code>Wiregrid.Transport.Command.dispatch/5</code> handles built-in commands before any extension. The command term is bounded (depth and size) and must fit in <code>max_websocket_frame_bytes</code>. Publish-shaped commands have <code>session_id</code> injected from the socket. A client-supplied <code>:session_id</code> is <code>:transport_session_override</code>.</p>
+<ul>
+  <li><code>{:subscribe, topic}</code> and <code>{:subscribe, topic, context}</code></li>
+  <li><code>{:unsubscribe, topic}</code></li>
+  <li><code>{:publish, topic, event, opts}</code>, <code>{:publish_room, room, event, opts}</code>, <code>{:dispatch, targets, event, opts}</code></li>
+  <li><code>{:send_user, user_id, event, opts}</code>, <code>{:send_session, target, event, opts}</code></li>
+  <li><code>{:presence, status}</code> and <code>{:presence, status, metadata}</code></li>
+  <li><code>{:watch_presence, user_id}</code>, <code>{:unwatch_presence, user_id}</code></li>
+  <li><code>{:join_room, room}</code>, <code>{:join_room, room, opts}</code>, <code>{:leave_room, room}</code></li>
+  <li><code>{:room_metadata, room, metadata, opts}</code>, <code>{:room_ttl, room, ttl}</code></li>
+  <li><code>{:typing, topic, opts}</code>, <code>{:activity, topic, kind, value, opts}</code></li>
+  <li><code>{:receipt, receipt, opts}</code>, <code>{:signal, room, kind, payload, opts}</code></li>
+  <li><code>{:sync_topology, topology, opts}</code></li>
+  <li><code>{:request_session, target, event, opts}</code>, <code>{:reply, envelope, event, opts}</code></li>
+  <li><code>{:replay, stream, opts}</code> bound to the current session</li>
+  <li><code>{:history, topic, opts}</code> with <code>:cursor</code> and <code>:limit</code> (default 50) via <code>read_history/5</code></li>
+  <li><code>{:ack, delivery_id}</code>, <code>{:ack_many, delivery_ids}</code></li>
+  <li><code>{:ping, nonce}</code> returns <code>{:pong, nonce}</code></li>
+</ul>
+<p>Unknown commands go to <code>command_handler</code>. The extension receives the command and a map with <code>instance</code>, <code>session_id</code>, and <code>user_id</code>. Auth headers, resume tokens, and the Cowboy request are not included. A crash or throw is <code>{:error, :command_handler_failed}</code>. With no handler, the result is <code>{:error, :unknown_command}</code>. LFE can generate a fixed grammar with <code>wiregrid_macros:defcompiled-command-handler</code>.</p>
+<p>Inbound frames may be <code>{:request, request_id, command}</code> or a bare command. The reply is <code>{:response, request_id, result}</code>. Outbound deliveries are <code>{:event, envelope}</code>. Encode failure stops the socket with <code>:outbound_encode_failed</code>. Oversized binary frames stop it with <code>:frame_too_large</code>.</p>

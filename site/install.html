@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html" aria-current="page">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Setup</p>
+<h1>Install</h1>
+<p>Elixir stays a Mix dependency of the application that runs the node. The C library, the browser kit, and the Gleam, LFE, and Erlang sources are installed by <code>scripts/install.sh</code> onto a prefix. Mix compiles the BEAM files inside the host application.</p>
+
+<h2 id="mix">Mix</h2>
+<pre><code class="language-elixir">def deps do
+  [
+    {:wiregrid, "~&gt; 1.0"}
+  ]
+end</code></pre>
+<p><code>mix.exs</code> requires <code>elixir: "&gt;= 1.17.0"</code>. The application starts <code>:crypto</code>, <code>:logger</code>, <code>:public_key</code>, and <code>:ssl</code>, and the application callback is <code>Wiregrid.Application</code>.</p>
+<p>Runtime dependencies are empty on purpose. These packages are declared <code>only: :test</code>:</p>
+<table>
+  <thead><tr><th>Package</th><th>Constraint</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td>postgrex</td><td><code>~&gt; 0.22.4</code></td><td>Postgres adapter tests</td></tr>
+    <tr><td>redix</td><td><code>~&gt; 1.9</code></td><td>Redis cache tests</td></tr>
+    <tr><td>xandra</td><td><code>~&gt; 0.19.4</code></td><td>Scylla adapter tests</td></tr>
+    <tr><td>cowboy</td><td><code>~&gt; 2.18.0</code></td><td>WebSocket transport tests</td></tr>
+    <tr><td>cowlib</td><td><code>~&gt; 2.19.0</code>, <code>override: true</code></td><td>Keeps OTP 26 off Cowlib 2.20</td></tr>
+    <tr><td>stream_data</td><td><code>~&gt; 1.4</code></td><td>Property tests</td></tr>
+  </tbody>
+</table>
+<p>A host that wants Postgres, Redis, Scylla, or Cowboy in production adds those libraries itself and passes the connection or the handler module into Wiregrid. The Hex package file list ships <code>lib</code>, <code>src</code>, <code>priv</code>, <code>bindings</code>, <code>native</code>, <code>config</code>, <code>examples</code>, <code>scripts</code>, <code>docs</code>, <code>site</code>, and the usual project markdown.</p>
+
+<h2 id="prefix-selection">Prefix selection</h2>
+<p><code>scripts/install.sh</code> installs <code>include/wiregrid.h</code>, the static and shared libraries plus <code>pkgconfig/wiregrid.pc</code>, <code>share/wiregrid/ui</code>, <code>share/wiregrid/bindings</code>, and <code>share/wiregrid/LAYOUT</code>.</p>
+<ul>
+  <li><code>PREFIX</code>, when set, is used as given.</li>
+  <li>Root with <code>PREFIX</code> unset uses <code>/usr/local</code> when that directory exists.</li>
+  <li>Any other user gets <code>~/.local</code>.</li>
+  <li>On macOS, a Homebrew prefix owned by the current user is used when a system write to <code>/usr/local</code> is the wrong default. Homebrew is not invoked as root.</li>
+</ul>
+<p>When the prefix sits outside the default linker path, the script prints <code>PKG_CONFIG_PATH</code>, <code>LD_LIBRARY_PATH</code> or <code>DYLD_LIBRARY_PATH</code>, and <code>C_INCLUDE_PATH</code>. On Linux, <code>/usr</code> and <code>/usr/local</code> receive libraries in <code>lib64</code> when that is where the system keeps them. Other prefixes use <code>lib</code>.</p>
+
+<h2 id="release-archive">Release archive</h2>
+<p>A <code>v*</code> tag publishes <code>wiregrid-&lt;version&gt;-linux-x86_64.tar.gz</code> and <code>SHA256SUMS</code>. The install script checks that SHA-256 when the checksums asset is present. A missing checksums file is reported and the install continues.</p>
+<pre><code class="language-shell">curl -fsSL https://raw.githubusercontent.com/Plainwire-development/Wiregrid/v1.0.0/scripts/install.sh | sh</code></pre>
+<p><code>WIREGRID_VERSION</code> selects a tag (a leading <code>v</code> is optional). <code>WIREGRID_TARBALL</code> selects an archive already on disk. A checkout that contains <code>native/c</code> and <code>priv/ui</code> builds the C library on this machine. An unpacked release tree installs the files it already has. A script piped into the shell, with no source tree, downloads the GitHub release.</p>
+<p>The download URL is <code>https://github.com/Plainwire-development/Wiregrid/releases/download/v&lt;version&gt;/wiregrid-&lt;version&gt;-linux-x86_64.tar.gz</code>. Other operating systems and CPUs stop before installing a binary that does not match the machine. The script does not prompt. If the prefix is not writable, it exits.</p>
+
+<h2 id="checks-on-a-checkout">Checks on a checkout</h2>
+<pre><code class="language-shell">./scripts/doctor.sh
+./scripts/setup-dev.sh
+./scripts/verify.sh
+make -C native/c test</code></pre>
+<p><code>verify.sh</code> runs the test suite with warnings as errors, checks unused dependency overrides, and skips <code>mix format --check-formatted</code> on Elixir older than 1.19. LFE and Gleam checks are optional unless <code>WIREGRID_REQUIRE_LFE=1</code> or <code>WIREGRID_REQUIRE_GLEAM=1</code> is set. CI pins Gleam 1.18.1 and LFE 2.2.2.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#mix">Mix</a></li><li><a class="h2" href="#prefix-selection">Prefix selection</a></li><li><a class="h2" href="#release-archive">Release archive</a></li><li><a class="h2" href="#checks-on-a-checkout">Checks on a checkout</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

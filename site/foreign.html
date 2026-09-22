@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>C ABI and the gateway — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html" aria-current="page">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Protocol 1</p>
+<h1>C ABI and the foreign gateway</h1>
+<p><code>native/c</code> is a client library, not a NIF. It speaks TCP to <code>Wiregrid.Foreign.Gateway</code>. A fault in the C, Rust, Zig, Go, Python, Java, or .NET process stays in that process. The client never sees ETS table ids, pids, or Erlang external term layout. A subscribed C client on <code>general</code> is on the same channel as <code>MyApp.Chat.join(session, "general")</code>.</p>
+
+<h2 id="framing">Framing</h2>
+<p>The socket is Erlang <code>gen_tcp</code> with <code>packet: 4</code>: a 4-byte big-endian length, then one frame. Inside the frame:</p>
+<table>
+  <thead><tr><th>Bytes</th><th>Field</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>version, currently <code>1</code></td></tr>
+    <tr><td>1</td><td>kind: <code>0</code> request, <code>1</code> response, <code>2</code> event</td></tr>
+    <tr><td>1</td><td>operation</td></tr>
+    <tr><td>4</td><td>request id, unsigned big-endian</td></tr>
+    <tr><td>rest</td><td>TLV fields</td></tr>
+  </tbody>
+</table>
+<p>A field is one tag byte, a 4-byte big-endian length, and the value. Protocol 1 allows 32 fields, 1,048,576 bytes per field, and 2,097,152 bytes per frame. Duplicate tags are <code>{:duplicate_field, tag}</code>. A mismatched version is <code>{:unsupported_protocol, version}</code>.</p>
+
+<h2 id="operations">Operations</h2>
+<table>
+  <thead><tr><th>Name</th><th>Code</th></tr></thead>
+  <tbody>
+    <tr><td>hello</td><td>1</td></tr>
+    <tr><td>subscribe</td><td>2</td></tr>
+    <tr><td>unsubscribe</td><td>3</td></tr>
+    <tr><td>publish</td><td>4</td></tr>
+    <tr><td>ack</td><td>5</td></tr>
+    <tr><td>presence</td><td>6</td></tr>
+    <tr><td>join_room</td><td>7</td></tr>
+    <tr><td>leave_room</td><td>8</td></tr>
+    <tr><td>ping</td><td>9</td></tr>
+    <tr><td>history</td><td>10</td></tr>
+    <tr><td>event</td><td>64</td></tr>
+  </tbody>
+</table>
+<p>Requests use kind 0. Deliveries arrive as asynchronous frames with operation 64 and kind 2. There is no client-chosen session id on these calls. The connection’s hello creates one Wiregrid session, and every later op uses it.</p>
+
+<h2 id="field-tags">Field tags</h2>
+<table>
+  <thead><tr><th>Name</th><th>Tag</th></tr></thead>
+  <tbody>
+    <tr><td>instance</td><td>1</td></tr>
+    <tr><td>user_id</td><td>2</td></tr>
+    <tr><td>topic</td><td>3</td></tr>
+    <tr><td>payload</td><td>4</td></tr>
+    <tr><td>content_type</td><td>5</td></tr>
+    <tr><td>delivery_id</td><td>6</td></tr>
+    <tr><td>status</td><td>7</td></tr>
+    <tr><td>room</td><td>8</td></tr>
+    <tr><td>event_id</td><td>9</td></tr>
+    <tr><td>error</td><td>10</td></tr>
+    <tr><td>class</td><td>11</td></tr>
+    <tr><td>server_version</td><td>12</td></tr>
+    <tr><td>session_id</td><td>13</td></tr>
+    <tr><td>auth_token</td><td>14</td></tr>
+    <tr><td>cursor</td><td>15</td></tr>
+    <tr><td>limit</td><td>16</td></tr>
+  </tbody>
+</table>
+<p>Topic text uses the chat names: a bare <code>general</code> is <code>{:channel, "general"}</code>, <code>thread:42</code> is <code>{:thread, "42"}</code>, <code>channel:i:7</code> is <code>{:channel, 7}</code>, and <code>custom:ops:desk</code> is <code>{:custom, "ops", "desk"}</code>. The token <code>beam-only</code> and an <code>a:</code> atom id are refused on input so a client cannot create atoms. <code>join_room</code> takes the room id as a plain string, so <code>lobby</code> matches an Elixir <code>join_room</code> of <code>"lobby"</code>.</p>
+<p><code>application/json</code> bodies are decoded into chat event maps (<code>type</code>, <code>body</code>, <code>message_id</code>, and the other chat fields). Any other content type is delivered as <code>%{type: :foreign, payload: ..., content_type: ...}</code>. Events produced on the BEAM are encoded as JSON on the way out, so a C client can read a normal <code>say</code>. <code>history</code> checks the <code>:read</code> authorizer and returns JSON <code>{"events":[...]}</code> plus a cursor field. Durable publishes are stored before delivery. Ephemeral publishes are not stored.</p>
+
+<h2 id="running-the-gateway">Running the gateway</h2>
+<pre><code class="language-elixir">children = [
+  MyApp.Chat,
+  {Wiregrid.Foreign.Gateway,
+   instance: :chat,
+   port: 9567,
+   max_connections: 2_000,
+   authenticate: fn user_id, token -&gt; MyApp.ForeignAuth.check(user_id, token) end}
+]</code></pre>
+<p>Defaults: <code>ip</code> <code>{127,0,0,1}</code>, <code>port</code> <code>0</code> (the OS picks a port; read it with <code>Wiregrid.Foreign.Gateway.port/1</code>), <code>max_connections</code> 1,024 (range 1..100,000), <code>idle_timeout_ms</code> 60,000 (1,000..3,600,000), <code>send_timeout_ms</code> 5,000 (100..120,000), <code>max_protocol_errors</code> 8 (1..100). <code>allow_anonymous: true</code> installs a function that accepts every hello, and only when the bind address is loopback. On any other address the option raises. <code>authenticate</code> is a function of arity 2. Return <code>:ok</code> or <code>true</code> to accept. C ABI major is 1, the same generation as <code>Wiregrid.c_abi_major/0</code>.</p>
+<p>Listen options include <code>packet: 4</code>, <code>binary</code>, <code>nodelay</code>, <code>reuseaddr</code>, a backlog of <code>min(max_connections, 4096)</code>, and <code>packet_size</code> set to the 2 MiB frame cap. The gateway does not wrap the socket in TLS.</p>
+
+<h2 id="c-client">C client</h2>
+<pre><code class="language-c">wg_client *client = NULL;
+wg_client_options options;
+wg_client_options_init(&amp;options);
+options.auth_token = getenv("WIREGRID_TOKEN");
+
+if (wg_connect("127.0.0.1", 9567, "alice", &amp;options, &amp;client) == WG_OK) {
+    wg_subscribe(client, "general");
+    wg_publish(client, "general", "hello", 5, "text/plain", 1, NULL, 0);
+    wg_close(client);
+}</code></pre>
+<p>Header <code>wiregrid.h</code> defines <code>WG_ABI_MAJOR 1</code>, <code>WG_ABI_MINOR 1</code>, <code>WG_PROTOCOL_VERSION 1</code>, and <code>WG_DEFAULT_EVENT_QUEUE 1024</code>. Results are <code>WG_OK</code> (0) and <code>WG_ERR_ARGUMENT</code>, <code>WG_ERR_MEMORY</code>, <code>WG_ERR_IO</code>, <code>WG_ERR_PROTOCOL</code>, <code>WG_ERR_REMOTE</code>, <code>WG_ERR_TIMEOUT</code>, <code>WG_ERR_OVERFLOW</code>, <code>WG_ERR_CLOSED</code> (negative codes from -1 through -8).</p>
+<p>Calls: <code>wg_connect</code>, <code>wg_connect_ex</code> (writes an error buffer), <code>wg_close</code>, <code>wg_subscribe</code>, <code>wg_unsubscribe</code>, <code>wg_publish</code> (payload, content type, durable flag, optional event-id buffer), <code>wg_ack</code>, <code>wg_set_presence</code>, <code>wg_join_room</code>, <code>wg_leave_room</code>, <code>wg_ping</code>, <code>wg_history</code>, <code>wg_poll</code>, <code>wg_event_free</code>, <code>wg_last_error</code>, <code>wg_result_string</code>, <code>wg_protocol_version</code>, <code>wg_abi_major</code>, <code>wg_abi_minor</code>. <code>wg_history</code> with limit 0 asks the server for its default page. The output buffer receives <code>{"events":[...]}</code>. <code>wg_poll</code> with timeout 0 does not block.</p>
+<p>One owner drives a handle. There is no hidden thread. While a request waits, async deliveries sit in a bounded queue. If that queue fills, the client closes and returns <code>WG_ERR_OVERFLOW</code> rather than dropping a delivery and leaving ack state ambiguous. <code>wg_client_options</code> has <code>timeout_ms</code>, <code>event_queue_capacity</code>, and <code>auth_token</code>.</p>
+<pre><code class="language-shell">make -C native/c
+make -C native/c test
+curl -fsSL https://raw.githubusercontent.com/Plainwire-development/Wiregrid/v1.0.0/scripts/install.sh | sh
+pkg-config --exists wiregrid
+cc -o chat chat.c $(pkg-config --cflags --libs wiregrid)</code></pre>
+<p>The install lands <code>include/wiregrid.h</code>, <code>libwiregrid.a</code>, <code>libwiregrid.so</code> or <code>.dylib</code>, and <code>lib/pkgconfig/wiregrid.pc</code>. Wrappers in other languages should keep the C structs private, copy event bytes out before <code>wg_event_free</code>, and make close safe to call twice.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#framing">Framing</a></li><li><a class="h2" href="#operations">Operations</a></li><li><a class="h2" href="#field-tags">Field tags</a></li><li><a class="h2" href="#running-the-gateway">Running the gateway</a></li><li><a class="h2" href="#c-client">C client</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

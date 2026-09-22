@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delivery and acknowledgements — Wiregrid manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="index.html">
+      <svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <g>
+    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
+    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
+    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
+    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
+  </g>
+  <g>
+    <circle cx="82" cy="26" r="16" fill="#c41628"/>
+    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
+    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
+    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
+  </g>
+  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+  </g>
+</svg>
+      <span class="word">
+        <span class="name">Wiregrid</span>
+        <span class="sub">Plainwire · Manual 1.0</span>
+      </span>
+    </a>
+    <form class="find" role="search" action="index.html">
+      <input id="q" type="search" placeholder="Filter pages" autocomplete="off" aria-label="Filter the manual">
+    </form>
+  </header>
+  <hr class="oxblood">
+  <div id="results" class="results"></div>
+  <div class="frame">
+    <nav class="contents" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol><li><a href="index.html">Front</a></li><li><a href="install.html">Install</a></li><li><a href="chat.html">Chat façade</a></li><li><a href="sessions.html">Sessions and resume</a></li><li><a href="publish.html">Topics, publish, dispatch</a></li><li><a href="delivery.html" aria-current="page">Delivery and acknowledgements</a></li><li><a href="presence.html">Presence, rooms, signals</a></li><li><a href="storage.html">Storage</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="security.html">Authorization and security</a></li><li><a href="elixir.html">Elixir API</a></li><li><a href="erlang.html">Erlang API</a></li><li><a href="gleam.html">Gleam</a></li><li><a href="lfe.html">LFE</a></li><li><a href="foreign.html">C ABI and the gateway</a></li><li><a href="ui.html">Browser UI kit</a></li><li><a href="cowboy.html">Cowboy transport</a></li><li><a href="operations.html">Clustering and operations</a></li><li><a href="architecture.html">Architecture</a></li></ol>
+    </nav>
+    <article class="sheet">
+      <p class="kicker">Backpressure</p>
+<h1>Delivery and acknowledgements</h1>
+<p>Fanout does not call <code>process_info/2</code> on each recipient. Each session has a counter Wiregrid maintains, and each durable send inserts a reservation <code>{session_id, delivery_id}</code> before the message is placed in the owner mailbox.</p>
+
+<h2 id="the-envelope">The envelope</h2>
+<pre><code class="language-elixir">receive do
+  {:"$wiregrid", envelope} ->
+    envelope.instance
+    envelope.session_id
+    envelope.delivery_id
+    envelope.topic
+    envelope.class
+    envelope.event
+    Wiregrid.ack(envelope.instance, envelope.session_id, envelope.delivery_id)
+end</code></pre>
+<p>The message is always the two-tuple <code>{:"$wiregrid", envelope}</code>. The map always has <code>instance</code>, <code>session_id</code>, <code>delivery_id</code>, <code>topic</code>, and <code>class</code> (<code>:durable</code> or <code>:ephemeral</code>). <code>context</code> is present only when the subscription or fanout supplied a non-empty context map. <code>delivery_format</code> chooses the body:</p>
+<ul>
+  <li><code>:term</code> adds <code>event</code></li>
+  <li><code>:encoded</code> adds <code>payload</code> (codec bytes)</li>
+  <li><code>:both</code> adds <code>event</code> and <code>payload</code></li>
+</ul>
+<p><code>Wiregrid.decode_payload/2</code> turns an encoded payload back into a term for the instance’s codec. <code>Wiregrid.Chat.ack/2</code> needs <code>session_id</code> and <code>delivery_id</code> on that map.</p>
+
+<h2 id="soft-queue-and-hard-queue">Soft queue and hard queue</h2>
+<p>Defaults are <code>soft_queue: 500</code> and <code>hard_queue: 2_000</code>. <code>soft_queue</code> must be strictly below <code>hard_queue</code> or startup returns <code>:soft_queue_must_be_below_hard_queue</code>.</p>
+<table>
+  <thead><tr><th>Pending</th><th>Ephemeral</th><th>Durable</th></tr></thead>
+  <tbody>
+    <tr><td>at or under the soft queue</td><td>sent</td><td>sent, reservation held</td></tr>
+    <tr><td>above soft, at or under hard</td><td>dropped, <code>:dropped_ephemeral</code> increments</td><td>sent, reservation held</td></tr>
+    <tr><td>above hard</td><td>dropped</td><td>not admitted, <code>:admission_rejections</code> increments, fanout reports <code>:overloaded</code> or <code>:evicted</code></td></tr>
+  </tbody>
+</table>
+<p>When the pending count already exceeds the hard queue, Wiregrid rolls the counter back and may isolate the owner. <code>slow_consumer_action</code> is <code>:disconnect</code> by default, or <code>:exit_owner</code>. Capacity for reservations is also globally capped by <code>max_delivery_reservations</code> (100,000 / 2,000,000 / 20,000,000 on the three profiles). A full table rejects the send before the mailbox grows.</p>
+
+<h2 id="acknowledgements">Acknowledgements</h2>
+<pre><code class="language-elixir">{:ok, pending} = Wiregrid.ack(:chat, session_id, delivery_id)
+{:ok, %{acked: n, unknown: missing, pending: left}} =
+  Wiregrid.ack_many(:chat, session_id, ids)
+{:ok, pending} = Wiregrid.ack(:chat, session_id)
+count = Wiregrid.pending(:chat, session_id)</code></pre>
+<p><code>ack/3</code> takes one reservation and returns the new pending count, or <code>{:error, :unknown_delivery}</code>. <code>ack_many/3</code> accepts up to <code>max_batch_items</code> ids and reports how many were released. Unknown ids are listed; they are not an error for the whole call. <code>ack/2</code> acknowledges one of the session’s reservations, the first key in the table, and returns <code>{:ok, 0}</code> when none remain. Protocol adapters should call <code>ack/3</code> with the id from the envelope so the client and the server agree on which message was committed. <code>pending/2</code> returns <code>0</code> for an invalid session id or a missing instance.</p>
+<p>Do the application work, then ack. Acknowledging before the write commits tells Wiregrid the consumer is healthy while the data is still in flight. Grouped helpers <code>consume_delivery/3</code>, <code>consume_many_deliveries/3</code>, <code>consume_ordered_deliveries/3</code>, and <code>consume_projection/5</code> run a handler and acknowledge only what the handler committed. Failed items stay reserved.</p>
+
+<h2 id="replay">Replay</h2>
+<pre><code class="language-elixir">{:ok, stats} = Wiregrid.replay_session(:chat, session_id, {:channel, "general"}, limit: 50)</code></pre>
+<p><code>replay_session/4</code> reads one bounded storage page and redelivers it through authorization and the same pressure rules. The returned resume cursor moves only past rows delivery accepted. A row that was refused for pressure is not skipped. Stats include <code>resume_cursor</code>, <code>next_cursor</code>, <code>delivered</code>, <code>dropped</code>, and <code>stopped</code>. Cowboy exposes this as the command <code>{:replay, stream, opts}</code>, and the router binds it to the socket’s session. The client cannot name another session id.</p>
+
+<h2 id="request-and-reply">Request and reply</h2>
+<pre><code class="language-elixir">{:ok, _} = Wiregrid.request_session(:chat, from_session, to_session, event)
+context = Wiregrid.request_context(envelope)
+{:ok, _} = Wiregrid.reply(:chat, to_session, envelope, response)</code></pre>
+<p>Request and reply are ordinary deliveries with a context the callee can read. They use the same reservation model. There is no hidden side channel with different reliability.</p>
+    </article>
+    <nav class="onthepage" aria-label="On this page">
+      <h2>On this page</h2>
+      <ol><li><a class="h2" href="#the-envelope">The envelope</a></li><li><a class="h2" href="#soft-queue-and-hard-queue">Soft queue and hard queue</a></li><li><a class="h2" href="#acknowledgements">Acknowledgements</a></li><li><a class="h2" href="#replay">Replay</a></li><li><a class="h2" href="#request-and-reply">Request and reply</a></li></ol>
+    </nav>
+  </div>
+  <p class="foot">Wiregrid 1.0 · Plainwire · <a href="https://github.com/Plainwire-development/Wiregrid">github.com/Plainwire-development/Wiregrid</a></p>
+  <script src="search-index.js"></script>
+  <script src="manual.js"></script>
+</body>
+</html>

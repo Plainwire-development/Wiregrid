@@ -1,0 +1,62 @@
+<p class="kicker">Application API</p>
+<h1>Chat façade</h1>
+<p><code>Wiregrid.Chat</code> is the opinionated path for channel chat, direct messages, typing, reactions, edits, deletes, and read markers. It calls the same runtime as <code>Wiregrid.publish/4</code>. There is no second engine and no second set of sessions.</p>
+
+<h2>Defining the module</h2>
+<pre><code class="language-elixir">defmodule MyApp.Chat do
+  use Wiregrid.Chat,
+    instance: :chat,
+    options: [profile: :small, authorizer: MyApp.Auth],
+    chat: [max_message_bytes: 8_192]
+end</code></pre>
+<p><code>instance</code> is required. <code>options</code> is the keyword list passed to <code>Wiregrid.Config</code> and defaults to <code>[]</code>, which selects the <code>:balanced</code> profile. <code>chat</code> is validated by <code>Wiregrid.Chat.Config</code> at compile time; unknown keys raise <code>ArgumentError</code>.</p>
+<p>The generated module defines <code>child_spec/1</code>, so it drops into a supervision tree. It also defines <code>instance/0</code>, <code>wiregrid_options/0</code>, <code>chat_config/0</code>, and <code>gateway_child_spec/1</code>, which starts <code>Wiregrid.Foreign.Gateway</code> bound to the same instance. <code>child_spec/1</code> is overridable.</p>
+<p><code>mix wiregrid.gen.chat MyApp.Chat --instance chat --profile small</code> writes a module of this shape.</p>
+
+<h2>Connect, join, say, history</h2>
+<pre><code class="language-elixir">{:ok, session_id} = MyApp.Chat.connect("alice")
+:ok = MyApp.Chat.join(session_id, "general")
+{:ok, result} = MyApp.Chat.say(session_id, "general", "hello")
+{:ok, rows, next} = MyApp.Chat.history("general", nil, 100)</code></pre>
+<p><code>connect/3</code> is <code>connect(user_id, pid \\ self(), opts \\ [])</code> and returns <code>{:ok, session_id}</code>. <code>join/3</code> subscribes to <code>{:channel, channel}</code>. An optional context map is stored with the subscription.</p>
+<p><code>say/4</code> builds a <code>%{type: :message, body: body}</code> event and publishes it with <code>class: :durable</code>, <code>persist: true</code>, and <code>session_id</code> set to the speaker. Persistence uses the channel topic as the storage stream, so <code>history/3</code> pages the same rows. The default page size is 100. <code>history(channel, cursor \\ nil, limit \\ 100)</code> returns <code>{:ok, rows, next_cursor}</code>.</p>
+<p>Say options are the message fields <code>:attachments</code>, <code>:mentions</code>, <code>:metadata</code>, <code>:nonce</code>, <code>:reply_to</code>, plus the publish fields <code>:event_id</code>, <code>:meta</code>, <code>:cluster</code>, <code>:exclude_sessions</code>, and <code>:exclude_users</code>. Duplicate keys are rejected as <code>:invalid_chat_options</code>.</p>
+
+<h2>Whisper and the user stream</h2>
+<p><code>whisper(session_id, user_id, body, opts \\ [])</code> sends the same message event with <code>Wiregrid.send_user/4</code>. The stream is <code>{:user, user_id}</code>. Read it back with <code>inbox_history(user_id, cursor \\ nil, limit \\ 100)</code>. Whisper options are <code>:event_id</code>, <code>:meta</code>, and <code>:cluster</code>, plus the message fields. The call forces <code>class: :durable</code> and <code>persist: true</code>.</p>
+
+<h2>Edits, deletes, reactions, typing, reads</h2>
+<table>
+  <thead><tr><th>Call</th><th>Event</th><th>Class</th></tr></thead>
+  <tbody>
+    <tr><td><code>edit(session, channel, message_id, body)</code></td><td><code>%{type: :message_edit, message_id:, body:}</code></td><td>durable, persisted</td></tr>
+    <tr><td><code>delete(session, channel, message_id, reason \\ nil)</code></td><td><code>%{type: :message_delete, message_id:, reason:}</code></td><td>durable, persisted</td></tr>
+    <tr><td><code>react/4</code> and <code>unreact/4</code></td><td><code>:reaction_add</code> or <code>:reaction_remove</code></td><td>durable, persisted</td></tr>
+    <tr><td><code>mark_read(session, channel, message_id)</code></td><td><code>%{type: :read, message_id:}</code></td><td>ephemeral, not persisted, sender excluded</td></tr>
+    <tr><td><code>typing(session, channel, active? \\ true)</code></td><td><code>%{type: :typing, active: boolean}</code></td><td>ephemeral, not persisted, sender excluded</td></tr>
+  </tbody>
+</table>
+<p>Bodies are binaries. <code>Wiregrid.Chat.Event</code> trims them and rejects a body larger than <code>max_message_bytes</code> with <code>:message_too_large</code>. An empty body with an empty attachment list is <code>:empty_message</code>. An empty body with attachments is allowed when <code>allow_empty_messages_with_attachments</code> is true, which is the default. Edits still require a non-empty body. Reactions reject an empty emoji with <code>:empty_reaction</code>. Message ids are binaries up to 256 bytes, or an integer or atom.</p>
+<p>Constructors drop <code>nil</code>, <code>[]</code>, and <code>%{}</code> fields so a plain text message stays a small map. The finished event must fit in <code>max_chat_event_bytes</code>.</p>
+<p><code>set_presence(session_id, status, metadata \\ %{})</code> forwards to <code>Wiregrid.set_presence/4</code>. <code>ack/1</code> accepts a map with <code>session_id</code> and <code>delivery_id</code> and acknowledges that one delivery. Any other term is <code>{:error, :invalid_delivery_envelope}</code>.</p>
+
+<h2>Chat limits</h2>
+<p>These defaults live in <code>Wiregrid.Chat.Config</code>. They are separate from the instance profile.</p>
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>Ceiling</th></tr></thead>
+  <tbody>
+    <tr><td><code>max_message_bytes</code></td><td>65,536</td><td>1,048,576, and not above <code>max_chat_event_bytes</code></td></tr>
+    <tr><td><code>max_attachment_count</code></td><td>32</td><td>256</td></tr>
+    <tr><td><code>max_mention_count</code></td><td>100</td><td>10,000</td></tr>
+    <tr><td><code>max_reaction_bytes</code></td><td>64</td><td>positive integer</td></tr>
+    <tr><td><code>max_client_nonce_bytes</code></td><td>128</td><td>positive integer</td></tr>
+    <tr><td><code>max_chat_event_bytes</code></td><td>262,144</td><td>1,048,576</td></tr>
+    <tr><td><code>message_rate_limit</code></td><td><code>{30, 10_000}</code></td><td>limit 1..100,000, window 100..3,600,000 ms, or <code>nil</code></td></tr>
+    <tr><td><code>activity_rate_limit</code></td><td><code>{60, 10_000}</code></td><td>same shape, or <code>nil</code></td></tr>
+    <tr><td><code>allow_empty_messages_with_attachments</code></td><td><code>true</code></td><td>boolean</td></tr>
+  </tbody>
+</table>
+<p>Say, whisper, edit, and delete spend the message limiter. React and typing spend the activity limiter. Both use a token bucket whose burst equals the limit, keyed by the session id under <code>:chat_message</code> or <code>:chat_activity</code>. A <code>nil</code> rate skips the check. Metadata maps are capped at 128 keys. Attachment and mention lists that exceed their counts return <code>{:error, {:invalid_or_too_many, field}}</code>.</p>
+
+<h2>What arrives in the mailbox</h2>
+<p>Joiners receive <code>{:"$wiregrid", envelope}</code>. With the default <code>delivery_format: :term</code> the map contains <code>:event</code> and the chat map above. Durable says keep a delivery reservation until <code>MyApp.Chat.ack(envelope)</code> or <code>Wiregrid.ack(instance, session_id, delivery_id)</code>. Typing and read markers are ephemeral: past the soft queue they are dropped, and they do not occupy storage.</p>

@@ -1,0 +1,60 @@
+<p class="kicker">Runtime</p>
+<h1>Sessions and resume</h1>
+<p>A session is a bounded attachment between a user id, an owner pid, and the instance’s ETS indexes. The owner is the process that receives <code>{:"$wiregrid", envelope}</code>. Cowboy, the foreign gateway, and <code>Wiregrid.Consumer.Worker</code> are owners. An ordinary Elixir process can be one too.</p>
+
+<h2>Starting an instance</h2>
+<pre><code class="language-elixir">{:ok, _pid} = Wiregrid.start_instance(:chat, profile: :small)
+# or, inside a supervision tree:
+Wiregrid.instance_child_spec(:chat, profile: :balanced)</code></pre>
+<p><code>start_instance/2</code> builds config, then starts a permanent child under <code>Wiregrid.InstanceSupervisor</code>. Starting an instance that is already up returns <code>{:ok, pid}</code> for the existing supervisor. <code>stop_instance/1</code> returns <code>{:error, :not_found}</code> when the name is absent. Unknown or duplicate options fail in <code>Wiregrid.Config.build/1</code> before any table is created.</p>
+
+<h2>Connect</h2>
+<pre><code class="language-elixir">{:ok, session_id} = Wiregrid.connect(:chat, "alice", self())
+{:ok, session_id} = Wiregrid.connect(:chat, "alice", self(),
+  metadata: %{"role" => "member"},
+  status: :online,
+  ack_mode: :manual,
+  delivery_format: :term
+)</code></pre>
+<p>Accepted connect options are <code>:metadata</code>, <code>:status</code>, <code>:presence_metadata</code>, <code>:ack_mode</code>, and <code>:delivery_format</code>.</p>
+<table>
+  <thead><tr><th>Option</th><th>Default</th><th>Values</th></tr></thead>
+  <tbody>
+    <tr><td><code>ack_mode</code></td><td><code>:manual</code></td><td><code>:manual</code> or <code>:transport</code></td></tr>
+    <tr><td><code>delivery_format</code></td><td><code>:term</code></td><td><code>:term</code>, <code>:encoded</code>, <code>:both</code></td></tr>
+  </tbody>
+</table>
+<p><code>:term</code> puts the decoded event on the envelope under <code>:event</code>. <code>:encoded</code> puts the codec bytes under <code>:payload</code> and leaves decoding to the consumer. <code>:both</code> includes both keys. Gleam’s <code>connect_encoded</code> asks for <code>delivery_format: :encoded</code>.</p>
+<p>Session ids are binaries, at most <code>max_session_id_bytes</code> (96 on the base config). User ids are bounded by <code>max_user_id_bytes</code> (512). Metadata is bounded by <code>max_metadata_bytes</code> (16,384).</p>
+<p>Two caps apply at once. <code>max_sessions_per_user</code> is 32 on the base config and is not replaced by the profile. <code>max_sessions_per_owner</code> limits how many sessions share one pid: 32 on <code>:small</code>, 128 on <code>:balanced</code>, and 1,024 on <code>:large</code>. The base map also lists 128, and the selected profile overwrites it.</p>
+
+<h2>Resume tokens</h2>
+<pre><code class="language-elixir">{:ok, session_id, token} = Wiregrid.connect_resumable(:chat, "alice", self())
+{:ok, %{session_id: new_id, resume_token: next, restored: restored}} =
+  Wiregrid.resume_session(:chat, "alice", self(), token)</code></pre>
+<p>The token is random, stored as a hash, bound to the same user, and single use. A successful resume rotates it. <code>resume_ttl_ms</code> defaults to 120,000. <code>reconnect_grace_ms</code> defaults to 15,000 and covers the window in which room membership can be held after the old owner exits.</p>
+<p><code>restored</code> reports subscriptions, presence watches, and rooms separately. Each domain has its own success and failure counts. Restored edges are authorized again. A resume does not keep a permission the authorizer would now refuse.</p>
+<p><code>Wiregrid.resume_room(instance, room, old_session_id, new_session_id)</code> moves one room edge when the caller already holds both session ids.</p>
+
+<h2>Actors</h2>
+<pre><code class="language-elixir">{:ok, actor} = Wiregrid.connect_actor(:chat, "alice", self())
+{:ok, actor, token} = Wiregrid.connect_resumable_actor(:chat, "alice", self())
+{:ok, actor, next, restored} = Wiregrid.resume_actor(:chat, "alice", self(), token)
+{:ok, actor} = Wiregrid.actor(:chat, session_id)</code></pre>
+<p><code>Wiregrid.Actor</code> is a struct with <code>instance</code>, <code>session_id</code>, and <code>user_id</code>. Its functions pass that session id into publish, subscribe, presence, rooms, ack, and rate-limit calls. It does not cache an authorization decision. <code>Wiregrid.Actor.rate_limit/5</code> folds the session id into the limiter key.</p>
+
+<h2>Changing and closing a session</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.set_session_metadata(:chat, session_id, %{"desk" => "eu"})
+:ok = Wiregrid.disconnect(:chat, session_id, :normal)
+:ok = Wiregrid.disconnect_user(:chat, "alice", :replaced)</code></pre>
+<p><code>disconnect/3</code> and <code>disconnect_user/3</code> default the reason to <code>:normal</code>. Disconnect releases delivery reservations for that session. <code>session/2</code>, <code>user_sessions/3</code>, <code>subscriptions/3</code>, and <code>session_state/3</code> return bounded summaries. They do not return owner pids, monitor refs, resume-token hashes, or ETS table identifiers.</p>
+
+<h2>Reconciling topology</h2>
+<pre><code class="language-elixir">:ok = Wiregrid.sync_subscriptions(:chat, session_id, [{:channel, "general"}, {:channel, "ops"}])
+{:ok, report} = Wiregrid.sync_topology(:chat, session_id, %{
+  subscriptions: [{:channel, "general"}],
+  presence_watches: ["bob"],
+  rooms: ["lobby"]
+})</code></pre>
+<p><code>sync_subscriptions/4</code> makes the subscription set match the list. <code>sync_topology/4</code> accepts a map with <code>:subscriptions</code>, <code>:presence_watches</code>, and <code>:rooms</code>. Omitted domains are left alone. Each requested domain reports on its own. Wiregrid does not present several edge sets as one distributed transaction.</p>
+<p><code>subscribe_many/4</code>, <code>unsubscribe_many/3</code>, <code>join_rooms/4</code>, <code>leave_rooms/3</code>, <code>watch_presence_many/4</code>, and <code>sync_presence_watches/4</code> are the bounded batch forms. List lengths are checked against the relevant per-session caps before the runtime applies them.</p>

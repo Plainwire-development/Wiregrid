@@ -1,0 +1,47 @@
+<p class="kicker">Setup</p>
+<h1>Install</h1>
+<p>Elixir stays a Mix dependency of the application that runs the node. The C library, the browser kit, and the Gleam, LFE, and Erlang sources are installed by <code>scripts/install.sh</code> onto a prefix. Mix compiles the BEAM files inside the host application.</p>
+
+<h2>Mix</h2>
+<pre><code class="language-elixir">def deps do
+  [
+    {:wiregrid, "~&gt; 1.0"}
+  ]
+end</code></pre>
+<p><code>mix.exs</code> requires <code>elixir: "&gt;= 1.17.0"</code>. The application starts <code>:crypto</code>, <code>:logger</code>, <code>:public_key</code>, and <code>:ssl</code>, and the application callback is <code>Wiregrid.Application</code>.</p>
+<p>Runtime dependencies are empty on purpose. These packages are declared <code>only: :test</code>:</p>
+<table>
+  <thead><tr><th>Package</th><th>Constraint</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td>postgrex</td><td><code>~&gt; 0.22.4</code></td><td>Postgres adapter tests</td></tr>
+    <tr><td>redix</td><td><code>~&gt; 1.9</code></td><td>Redis cache tests</td></tr>
+    <tr><td>xandra</td><td><code>~&gt; 0.19.4</code></td><td>Scylla adapter tests</td></tr>
+    <tr><td>cowboy</td><td><code>~&gt; 2.18.0</code></td><td>WebSocket transport tests</td></tr>
+    <tr><td>cowlib</td><td><code>~&gt; 2.19.0</code>, <code>override: true</code></td><td>Keeps OTP 26 off Cowlib 2.20</td></tr>
+    <tr><td>stream_data</td><td><code>~&gt; 1.4</code></td><td>Property tests</td></tr>
+  </tbody>
+</table>
+<p>A host that wants Postgres, Redis, Scylla, or Cowboy in production adds those libraries itself and passes the connection or the handler module into Wiregrid. The Hex package file list ships <code>lib</code>, <code>src</code>, <code>priv</code>, <code>bindings</code>, <code>native</code>, <code>config</code>, <code>examples</code>, <code>scripts</code>, <code>docs</code>, <code>site</code>, and the usual project markdown.</p>
+
+<h2>Prefix selection</h2>
+<p><code>scripts/install.sh</code> installs <code>include/wiregrid.h</code>, the static and shared libraries plus <code>pkgconfig/wiregrid.pc</code>, <code>share/wiregrid/ui</code>, <code>share/wiregrid/bindings</code>, and <code>share/wiregrid/LAYOUT</code>.</p>
+<ul>
+  <li><code>PREFIX</code>, when set, is used as given.</li>
+  <li>Root with <code>PREFIX</code> unset uses <code>/usr/local</code> when that directory exists.</li>
+  <li>Any other user gets <code>~/.local</code>.</li>
+  <li>On macOS, a Homebrew prefix owned by the current user is used when a system write to <code>/usr/local</code> is the wrong default. Homebrew is not invoked as root.</li>
+</ul>
+<p>When the prefix sits outside the default linker path, the script prints <code>PKG_CONFIG_PATH</code>, <code>LD_LIBRARY_PATH</code> or <code>DYLD_LIBRARY_PATH</code>, and <code>C_INCLUDE_PATH</code>. On Linux, <code>/usr</code> and <code>/usr/local</code> receive libraries in <code>lib64</code> when that is where the system keeps them. Other prefixes use <code>lib</code>.</p>
+
+<h2>Release archive</h2>
+<p>A <code>v*</code> tag publishes <code>wiregrid-&lt;version&gt;-linux-x86_64.tar.gz</code> and <code>SHA256SUMS</code>. The install script checks that SHA-256 when the checksums asset is present. A missing checksums file is reported and the install continues.</p>
+<pre><code class="language-shell">curl -fsSL https://raw.githubusercontent.com/Plainwire-development/Wiregrid/v1.0.0/scripts/install.sh | sh</code></pre>
+<p><code>WIREGRID_VERSION</code> selects a tag (a leading <code>v</code> is optional). <code>WIREGRID_TARBALL</code> selects an archive already on disk. A checkout that contains <code>native/c</code> and <code>priv/ui</code> builds the C library on this machine. An unpacked release tree installs the files it already has. A script piped into the shell, with no source tree, downloads the GitHub release.</p>
+<p>The download URL is <code>https://github.com/Plainwire-development/Wiregrid/releases/download/v&lt;version&gt;/wiregrid-&lt;version&gt;-linux-x86_64.tar.gz</code>. Other operating systems and CPUs stop before installing a binary that does not match the machine. The script does not prompt. If the prefix is not writable, it exits.</p>
+
+<h2>Checks on a checkout</h2>
+<pre><code class="language-shell">./scripts/doctor.sh
+./scripts/setup-dev.sh
+./scripts/verify.sh
+make -C native/c test</code></pre>
+<p><code>verify.sh</code> runs the test suite with warnings as errors, checks unused dependency overrides, and skips <code>mix format --check-formatted</code> on Elixir older than 1.19. LFE and Gleam checks are optional unless <code>WIREGRID_REQUIRE_LFE=1</code> or <code>WIREGRID_REQUIRE_GLEAM=1</code> is set. CI pins Gleam 1.18.1 and LFE 2.2.2.</p>

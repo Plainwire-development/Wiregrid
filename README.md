@@ -89,6 +89,10 @@ a c client subscribed to `general` is on the same channel as `MyApp.Chat.join(se
 
 see `docs/foreign-clients.md` and `native/c/README.md`.
 
+## manual
+
+the html manual is in [`site/`](site/index.html). open that file in a browser, or read the published copy at <https://plainwire-development.github.io/Wiregrid/>.
+
 ## local install
 
 `scripts/install.sh` installs the c library, the browser ui kit, and the gleam, lfe, and erlang sources. set `PREFIX` to choose the directory. with `PREFIX` unset, root uses `/usr/local` when that directory exists, and any other user gets `~/.local`. on macos, a homebrew prefix you own is used when a system write to `/usr/local` is the wrong default.

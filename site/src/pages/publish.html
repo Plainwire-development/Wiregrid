@@ -1,0 +1,67 @@
+<p class="kicker">Routing</p>
+<h1>Topics, publish, and dispatch</h1>
+<p>A topic is a tuple. Fanout walks the ETS edges for that tuple. Storage, when asked to persist, uses the same tuple as the stream key.</p>
+
+<h2>Topic shapes</h2>
+<table>
+  <thead><tr><th>Tuple</th><th>Constructor</th><th>Foreign text</th></tr></thead>
+  <tbody>
+    <tr><td><code>{:user, id}</code></td><td><code>Wiregrid.Topic.user/1</code></td><td><code>user:ada</code></td></tr>
+    <tr><td><code>{:channel, id}</code></td><td><code>Wiregrid.Topic.channel/1</code></td><td><code>general</code> or <code>channel:general</code></td></tr>
+    <tr><td><code>{:thread, id}</code></td><td><code>Wiregrid.Topic.thread/1</code></td><td><code>thread:42</code></td></tr>
+    <tr><td><code>{:room, id}</code></td><td><code>Wiregrid.Topic.room/1</code></td><td><code>room:lobby</code></td></tr>
+    <tr><td><code>{:game, id}</code></td><td><code>Wiregrid.Topic.game/1</code></td><td><code>game:…</code></td></tr>
+    <tr><td><code>{:document, id}</code></td><td><code>Wiregrid.Topic.document/1</code></td><td><code>document:…</code></td></tr>
+    <tr><td><code>{:custom, namespace, value}</code></td><td><code>Wiregrid.Topic.custom/2</code></td><td><code>custom:ops:desk</code></td></tr>
+  </tbody>
+</table>
+<p>The whole term must fit in <code>max_topic_bytes</code> (512) and <code>max_topic_depth</code> (4). Untrusted strings are not turned into atoms. Integer ids are accepted where the validator allows an id, which is why <code>channel:i:7</code> on the foreign gateway becomes <code>{:channel, 7}</code>.</p>
+
+<h2>Publish</h2>
+<pre><code class="language-elixir">{:ok, %{event_id: id, sent: n, cluster: cluster}} =
+  Wiregrid.publish(:chat, {:channel, "general"}, %{type: :message, body: "hello"},
+    session_id: session_id,
+    persist: true,
+    class: :durable,
+    meta: %{source: "app"},
+    exclude_sessions: [session_id]
+  )</code></pre>
+<p>Publish options are <code>:event_id</code>, <code>:persist</code>, <code>:meta</code>, <code>:class</code>, <code>:session_id</code>, <code>:cluster</code>, <code>:exclude_sessions</code>, and <code>:exclude_users</code>. Class defaults to <code>:durable</code>. <code>persist</code> defaults to <code>false</code>. <code>cluster</code> defaults to <code>true</code> and is then combined with the instance <code>cluster</code> flag, so a single-node instance still reports cluster <code>:disabled</code>. Exclusion lists are capped at 256 entries. The event itself must fit in <code>max_event_bytes</code> (1,048,576). The encoded form must fit in <code>max_encoded_event_bytes</code> (1,572,864), and that ceiling must be at least as large as <code>max_event_bytes</code>.</p>
+<p>Order inside <code>publish/4</code>:</p>
+<ol>
+  <li>The instance must be accepting work. A drained instance refuses the call.</li>
+  <li>Options, topic, and event are validated.</li>
+  <li>If <code>session_id</code> is <code>nil</code>, <code>authorize_actor/6</code> returns <code>:ok</code> without calling the authorizer. That path is for trusted in-process publishers.</li>
+  <li>If <code>session_id</code> is set, it must name a live session. <code>Authorizer.authorize/4</code> runs with action <code>:publish</code> and the topic as the resource. A missing session is <code>:unknown_session</code>.</li>
+  <li>The codec encodes the event once.</li>
+  <li>If <code>persist</code> is true, storage appends before local fanout.</li>
+  <li>Local fanout walks subscribers. Cluster forwarding runs when clustering is on and the call asked for it.</li>
+</ol>
+<p>The result map includes the fanout counters (<code>sent</code>, <code>dropped</code>, <code>evicted</code>, <code>gone</code>, <code>excluded</code>, <code>overloaded</code>), <code>event_id</code>, and <code>cluster</code>. A batch is not a transaction: <code>publish_batch/4</code> validates every event first, then reports <code>{:ok, %{index: i, ...}}</code> or <code>{:error, %{index: i, reason: reason}}</code> per event, with <code>completed</code> and <code>failed</code> totals. An empty list is <code>{:error, :empty_batch}</code>. The batch cap is <code>max_batch_items</code> (512).</p>
+
+<h2>Prepared events</h2>
+<pre><code class="language-elixir">{:ok, prepared} = Wiregrid.prepare(:chat, %{type: :notice, body: "deployed"})
+{:ok, _} = Wiregrid.publish_prepared(:chat, {:channel, "general"}, prepared, persist: false)
+{:ok, _} = Wiregrid.publish_topics_prepared(:chat, [{:channel, "general"}, {:document, "log"}], prepared)</code></pre>
+<p><code>prepare/2</code> validates and encodes once. Prepared publish, room, user, session, and dispatch functions reuse those bytes. The handle is signed for the instance that created it. Keep it inside the node. It is an in-process optimization, and it is not a credential a client should be allowed to submit.</p>
+<p><code>publish_topics/4</code> checks every topic and every authorization decision before the first persist or fanout. The result is still per topic. <code>publish_room/4</code> and <code>publish_rooms/4</code> fan out along room membership rather than topic subscriptions. The authorizer action for a room publish is <code>:publish_room</code>.</p>
+
+<h2>Direct sends</h2>
+<pre><code class="language-elixir">Wiregrid.send_user(:chat, "bob", event, session_id: session_id, persist: true, class: :durable)
+Wiregrid.send_session(:chat, other_session_id, event, session_id: session_id)
+Wiregrid.send_users(:chat, ["bob", "cara"], event, session_id: session_id)
+Wiregrid.send_sessions(:chat, [sid_a, sid_b], event, class: :ephemeral)</code></pre>
+<p>User sends accept <code>:class</code>, <code>:session_id</code>, <code>:cluster</code>, <code>:event_id</code>, <code>:persist</code>, and <code>:meta</code>. A persisted direct event uses <code>{:user, user_id}</code> as the stream, which is the stream <code>inbox_history</code> reads. Session sends accept <code>:class</code> and <code>:session_id</code>. When the option list is empty, <code>authorize_direct/6</code> returns <code>:ok</code> without a callback. A <code>nil</code> <code>session_id</code> does the same. A present session id is checked and then authorized.</p>
+
+<h2>Dispatch</h2>
+<pre><code class="language-elixir">targets = [
+  {:topic, {:channel, "general"}},
+  {:room, {:room, "lobby"}},
+  {:user, "bob"},
+  {:session, other_session_id}
+]
+{:ok, _} = Wiregrid.dispatch(:chat, targets, event, session_id: session_id)
+{:ok, plan} = Wiregrid.compile_dispatch(:chat, targets)
+{:ok, _} = Wiregrid.dispatch_plan(:chat, plan, event, session_id: session_id)</code></pre>
+<p>Targets are <code>{:topic, topic}</code>, <code>{:room, topic}</code>, <code>{:user, user_id}</code>, or <code>{:session, session_id}</code>. The set is bounded by <code>max_batch_targets</code> (4,096) and deduplicated before side effects. Execution is still per group. <code>compile_dispatch/2</code> freezes a checked topology into a plan that <code>dispatch_plan/4</code> and <code>dispatch_plan_prepared/4</code> can reuse. Plans are instance-local values, same as prepared events.</p>
+<p>Internet-facing Cowboy commands inject the socket’s session id and reject a client that tries to pass <code>:session_id</code> itself (<code>:transport_session_override</code>). In-process code that omits <code>session_id</code> skips the authorizer. Put a real authorizer on any instance a transport can reach, and pass the acting session on every call that represents a user.</p>

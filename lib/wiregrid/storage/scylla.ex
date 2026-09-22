@@ -494,11 +494,39 @@ defmodule Wiregrid.Storage.Scylla do
     _ -> {:error, :scylla_execute_failed}
   end
 
+  # Xandra.Page keeps raw column values in `:content`. Its Enumerable
+  # implementation zips those values with `:columns` into string-key maps.
+  # A plain `%{content: rows}` map is a test double and is returned as stored.
+  # Maps implement Enumerable too, so only a struct page is enumerated.
+  defp result_rows(%{__struct__: struct, columns: columns, content: content} = page)
+       when struct != nil and is_list(columns) and is_list(content) do
+    rows =
+      if Enumerable.impl_for(page) do
+        Enum.to_list(page)
+      else
+        content
+      end
+
+    if is_list(rows) and Enum.all?(rows, &is_map/1) do
+      {:ok, rows}
+    else
+      {:error, :unexpected_scylla_result}
+    end
+  rescue
+    _ -> {:error, :unexpected_scylla_result}
+  end
+
+  defp result_rows(%{content: content}) when is_list(content), do: {:ok, content}
+
   defp result_rows(result) do
-    cond do
-      is_map(result) and Map.has_key?(result, :content) -> {:ok, Enum.to_list(result.content)}
-      Enumerable.impl_for(result) != nil -> {:ok, Enum.to_list(result)}
-      true -> {:error, :unexpected_scylla_result}
+    if Enumerable.impl_for(result) != nil do
+      rows = Enum.to_list(result)
+
+      if is_list(rows) and Enum.all?(rows, &is_map/1),
+        do: {:ok, rows},
+        else: {:error, :unexpected_scylla_result}
+    else
+      {:error, :unexpected_scylla_result}
     end
   rescue
     _ -> {:error, :unexpected_scylla_result}
