@@ -73,7 +73,8 @@
 
 (defun sort-indexed (indexed)
   (: lists map
-     (lambda ((tuple _index envelope)) envelope)
+     (match-lambda
+       (((tuple _index envelope)) envelope))
      (: lists keysort 1 indexed)))
 
 (defun key-topic (envelope)

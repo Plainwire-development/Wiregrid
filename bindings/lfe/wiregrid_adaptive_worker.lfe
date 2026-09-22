@@ -29,8 +29,8 @@
         (tuple 'ok pid)))
     (error error)))
 
-(defun stats (pid) (call pid 'stats 5000))
-(defun stop (pid) (call pid 'stop 5000))
+(defun stats (pid) (request pid 'stats 5000))
+(defun stop (pid) (request pid 'stop 5000))
 
 (defun init (instance batch-handler batch-size failure-policy mode max-wait-ms)
   (: erlang process_flag 'message_queue_data 'off_heap)
@@ -70,8 +70,8 @@
       (cond
         ((>= length (- batch-size 1)) 0)
         ((>= length 32) 0)
-        ((>= length 8) (min max-wait-ms 1))
-        ((> length 0) (min max-wait-ms 1))
+        ((>= length 8) (: erlang min max-wait-ms 1))
+        ((> length 0) (: erlang min max-wait-ms 1))
         ('true max-wait-ms)))
     (_ 0)))
 
@@ -126,7 +126,7 @@
       (tuple 'error 'invalid_adaptive_wait))
     ('true (wiregrid_fast:validate-batch-size instance batch-size))))
 
-(defun call (pid operation timeout)
+(defun request (pid operation timeout)
   (case (andalso (is_pid pid) (is_integer timeout) (> timeout 0))
     ('true
       (let ((ref (: erlang make_ref)))
@@ -135,6 +135,3 @@
           ((tuple 'wiregrid_adaptive_worker ref reply) reply)
           (after timeout (tuple 'error 'timeout)))))
     ('false (tuple 'error 'invalid_call))))
-
-(defun min (a b)
-  (case (< a b) ('true a) ('false b)))

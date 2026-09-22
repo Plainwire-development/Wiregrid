@@ -8,7 +8,13 @@ cd "$ROOT"
 ./scripts/check-bindings.py
 ./scripts/check-foreign.py
 ./scripts/check-docs.py
-mix format --check-formatted
+# Elixir 1.19+ formats `with` clauses differently from 1.17/1.18. The tree is
+# formatted with 1.20, so older mix format checks would fail on the same files.
+if elixir -e 'System.halt(if(Version.match?(System.version(), ">= 1.19.0"), do: 0, else: 1))'; then
+  mix format --check-formatted
+else
+  printf 'skipping mix format check on Elixir < 1.19\n'
+fi
 mix deps.unlock --check-unused
 mix compile --warnings-as-errors
 MIX_ENV=test mix compile --warnings-as-errors

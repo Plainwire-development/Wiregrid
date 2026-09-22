@@ -36,11 +36,12 @@
 (defun resume (instance user pid token opts)
   (case (wiregrid_api:resume_session instance user pid token opts)
     ((tuple 'ok result)
-      (let ((session (: maps get 'session_id result))
-            (next (: maps get 'resume_token result))
-            (restored (: maps get 'restored result #M())))
-        (tuple 'ok #M(instance instance session_id session user_id user)
-               next restored)))
+      (tuple 'ok
+             #M(instance instance
+                session_id (: maps get 'session_id result)
+                user_id user)
+             (: maps get 'resume_token result)
+             (: maps get 'restored result #M())))
     (error error)))
 
 (defun instance (actor) (: maps get 'instance actor))

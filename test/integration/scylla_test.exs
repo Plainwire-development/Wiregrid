@@ -1,7 +1,6 @@
 defmodule Wiregrid.ScyllaIntegrationTest do
   use ExUnit.Case, async: false
 
-  @moduletag :integration
   @moduletag :scylla_integration
 
   test "Scylla adapter bootstrap, idempotent append and page" do

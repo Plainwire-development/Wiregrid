@@ -57,7 +57,7 @@
   (('ok) 'true)
   (('true) 'true)
   (('false) 'false)
-  (((tuple 'error _reason) = decision) decision)
+  (((tuple 'error reason)) (tuple 'error reason))
   ((_other) (tuple 'error 'authorization_failed)))
 
 (defun map-get (value key default)

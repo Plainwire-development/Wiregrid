@@ -161,7 +161,7 @@ defmodule Wiregrid.Storage.Scylla do
   def migration_statements(keyspace, replication_factor)
       when is_integer(replication_factor) and replication_factor in 1..16 do
     [
-      "CREATE KEYSPACE IF NOT EXISTS #{keyspace} WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': #{replication_factor}}",
+      "CREATE KEYSPACE IF NOT EXISTS #{keyspace} WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': #{replication_factor}} AND tablets = {'enabled': false}",
       """
       CREATE TABLE IF NOT EXISTS #{keyspace}.wiregrid_events (
         stream blob,

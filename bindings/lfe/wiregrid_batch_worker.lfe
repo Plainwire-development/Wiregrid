@@ -36,8 +36,8 @@
         (tuple 'ok pid)))
     (error error)))
 
-(defun stop (pid) (call pid 'stop 5000))
-(defun stats (pid) (call pid 'stats 5000))
+(defun stop (pid) (request pid 'stop 5000))
+(defun stats (pid) (request pid 'stats 5000))
 (defun hibernate (pid)
   (case (is_pid pid)
     ('true (: erlang send pid (tuple 'wiregrid_batch_worker 'cast 'hibernate)) 'ok)
@@ -130,7 +130,7 @@
         ('ok (wiregrid_mailbox:valid-wait wait-ms))
         (error error)))))
 
-(defun call (pid operation timeout)
+(defun request (pid operation timeout)
   (case (andalso (is_pid pid) (is_integer timeout) (> timeout 0))
     ('true
       (let ((ref (: erlang make_ref)))

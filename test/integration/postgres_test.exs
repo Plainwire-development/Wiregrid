@@ -5,7 +5,7 @@ defmodule Wiregrid.PostgresIntegrationTest do
 
   test "PostgreSQL adapter bootstrap, append, get and page" do
     url = System.fetch_env!("WIREGRID_POSTGRES_URL")
-    {:ok, conn} = Postgrex.start_link(url: url)
+    {:ok, conn} = Postgrex.start_link(postgres_options(url))
     instance = {:postgres_integration, System.unique_integer([:positive])}
 
     {:ok, _} =
@@ -23,5 +23,23 @@ defmodule Wiregrid.PostgresIntegrationTest do
              Wiregrid.Storage.get(instance, stream, "p1")
 
     assert {:ok, [_], nil} = Wiregrid.Storage.page(instance, stream, nil, 10)
+  end
+
+  defp postgres_options(url) do
+    %URI{userinfo: userinfo, host: host, port: port, path: path} = URI.parse(url)
+
+    {username, password} =
+      case String.split(userinfo || "", ":", parts: 2) do
+        [user, pass] -> {URI.decode(user), URI.decode(pass)}
+        [user] -> {URI.decode(user), ""}
+      end
+
+    [
+      hostname: host,
+      port: port || 5432,
+      username: username,
+      password: password,
+      database: path |> to_string() |> String.trim_leading("/")
+    ]
   end
 end

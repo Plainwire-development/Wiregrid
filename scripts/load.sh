@@ -15,4 +15,5 @@ export SLOW_PERCENT="${SLOW_PERCENT:-0}"
 export RECONNECT_PERCENT="${RECONNECT_PERCENT:-0}"
 export ROOM_CHURN_PERCENT="${ROOM_CHURN_PERCENT:-5}"
 
-exec MIX_ENV=test mix run scripts/load.exs
+export MIX_ENV=test
+exec mix run scripts/load.exs

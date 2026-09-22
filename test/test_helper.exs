@@ -1,1 +1,1 @@
-ExUnit.start(exclude: [:integration, :distributed, :load])
+ExUnit.start(exclude: [:integration, :scylla_integration, :distributed, :load])

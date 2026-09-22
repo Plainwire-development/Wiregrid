@@ -70,27 +70,29 @@
           (await-jobs rest deadline handled (+ failed count) (+ lanes 1)
                       (cons lane-error results)))))))
 
-(defun await-job ((tuple lane token pid monitor count) deadline)
-  (let ((remaining (max 0 (- deadline (: erlang monotonic_time 'millisecond)))))
-    (receive
-    ((tuple 'wiregrid_lane token result)
-      (: erlang demonitor monitor (list 'flush))
-      (normalize-result lane count result))
-    ((tuple 'DOWN monitor 'process pid reason)
-      (tuple 'error #M(lane lane envelopes count reason reason)))
-      (after remaining
-        (: erlang exit pid 'kill)
-        (receive
-          ((tuple 'DOWN monitor 'process pid _reason) 'ok)
-          (after 100 'ok))
-        (tuple 'error #M(lane lane envelopes count reason 'timeout))))))
+(defun await-job
+  (((tuple lane token pid monitor count) deadline)
+    (let ((remaining (larger 0 (- deadline (: erlang monotonic_time 'millisecond)))))
+      (receive
+        ((tuple 'wiregrid_lane token result)
+          (: erlang demonitor monitor (list 'flush))
+          (normalize-result lane count result))
+        ((tuple 'DOWN monitor 'process pid reason)
+          (tuple 'error #M(lane lane envelopes count reason reason)))
+        (after remaining
+          (: erlang exit pid 'kill)
+          (receive
+            ((tuple 'DOWN monitor 'process pid _reason) 'ok)
+            (after 100 'ok))
+          (tuple 'error #M(lane lane envelopes count reason 'timeout)))))))
 
-(defun normalize-result (lane count (tuple 'ok details))
-  (tuple 'ok (: maps merge #M(lane lane envelopes count) details)))
-(defun normalize-result (lane count (tuple 'error details))
-  (tuple 'error #M(lane lane envelopes count reason details)))
-(defun normalize-result (lane count other)
-  (tuple 'error #M(lane lane envelopes count reason (tuple 'invalid_lane_result other))))
+(defun normalize-result
+  ((lane count (tuple 'ok details))
+    (tuple 'ok (: maps merge #M(lane lane envelopes count) details)))
+  ((lane count (tuple 'error details))
+    (tuple 'error #M(lane lane envelopes count reason details)))
+  ((lane count other)
+    (tuple 'error #M(lane lane envelopes count reason (tuple 'invalid_lane_result other)))))
 
 (defun safe-consume (instance envelopes handler)
   (try
@@ -131,7 +133,7 @@
         ('true 'ok)))
     (error error)))
 
-(defun max (a b)
+(defun larger (a b)
   (case (> a b)
     ('true a)
     ('false b)))

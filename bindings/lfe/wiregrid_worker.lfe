@@ -164,10 +164,10 @@
     ('false (tuple 'error 'invalid_stages))))
 
 (defun stop (pid)
-  (call pid 'stop 5000))
+  (request pid 'stop 5000))
 
 (defun stats (pid)
-  (call pid 'stats 5000))
+  (request pid 'stats 5000))
 
 (defun init (instance handler batch-size failure-policy mode)
   (: erlang process_flag 'message_queue_data 'off_heap)
@@ -227,7 +227,7 @@
     ('true 'ok)
     ('false (tuple 'error 'invalid_mode))))
 
-(defun call (pid operation timeout)
+(defun request (pid operation timeout)
   (case (andalso (is_pid pid) (is_integer timeout) (> timeout 0))
     ('true
       (let ((ref (: erlang make_ref)))

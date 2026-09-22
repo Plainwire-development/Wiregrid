@@ -184,7 +184,8 @@
     ('true (bounded-list-loop value limit))
     ('false (tuple 'error 'invalid_batch))))
 
-(defun bounded-list-loop (() _remaining) 'ok)
-(defun bounded-list-loop (_items 0) (tuple 'error 'batch_too_large))
-(defun bounded-list-loop ((cons _item rest) remaining)
-  (bounded-list-loop rest (- remaining 1)))
+(defun bounded-list-loop
+  ((() _remaining) 'ok)
+  ((_items 0) (tuple 'error 'batch_too_large))
+  (((cons _item rest) remaining)
+    (bounded-list-loop rest (- remaining 1))))
