@@ -62,7 +62,56 @@ a:hover { text-decoration: underline; }
 
 .brand:visited { color: inherit; }
 
-.marks { flex: 0 0 auto; display: block; }
+.marks {
+  position: relative;
+  flex: 0 0 auto;
+  display: block;
+  width: 112px;
+  height: 52px;
+}
+.marks .logo {
+  position: absolute;
+  display: block;
+  z-index: 1;
+}
+.marks .elixir {
+  left: 0;
+  top: 5px;
+  width: 34px;
+  height: 42px;
+  overflow: hidden;
+}
+.marks .elixir img {
+  display: block;
+  height: 42px;
+  width: calc(42px * 583 / 245);
+  max-width: none;
+}
+.marks .grid {
+  position: absolute;
+  left: 18px;
+  top: 0;
+  z-index: 2;
+  display: block;
+}
+.marks .erlang {
+  left: 54px;
+  top: 0;
+  width: 54px;
+  height: 52px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #f4efe4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+.marks .erlang img {
+  display: block;
+  width: 38px;
+  height: calc(38px * 1397 / 1594);
+}
 
 .word { display: flex; flex-direction: column; min-width: 0; }
 .word .name {

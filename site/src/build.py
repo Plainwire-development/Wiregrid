@@ -33,27 +33,24 @@ NAV = [
     ("architecture.html", "Architecture"),
 ]
 
-MARKS = """<svg class="marks" width="104" height="52" viewBox="0 0 104 52" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
-  <g>
-    <circle cx="22" cy="26" r="16" fill="#5b2d82"/>
-    <polygon points="22,13 31,18.5 31,31 22,38 13,31 13,18.5" fill="#8a4eae"/>
-    <polygon points="22,17 28,20.5 22,26 16,20.5" fill="#e4d2f2"/>
-    <polygon points="22,26 28,20.5 28,30 22,35" fill="#3d1d5c"/>
-  </g>
-  <g>
-    <circle cx="82" cy="26" r="16" fill="#c41628"/>
-    <circle cx="82" cy="26" r="12.5" fill="none" stroke="#fff" stroke-width="1.2"/>
-    <text x="82" y="24.2" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8" font-weight="700" fill="#ffffff">OTP</text>
-    <text x="82" y="33" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.5" fill="#ffe4e6">ERLANG</text>
-  </g>
-  <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
-  <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
-  <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
-  <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
-    <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
-    <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
-  </g>
-</svg>"""
+# Official marks, referenced relatively so file:// and GitHub Pages both work.
+# Elixir (white word, for dark grounds): elixir-lang.org/downloads/logos/elixir-light.svg
+# Erlang/OTP: erlang.org/assets/img/erlang-logo.svg
+# The center coin is the existing Plainwire wire grid, drawn on top so the
+# charcoal ring cuts into the two logos.
+MARKS = """<span class="marks" role="img" aria-label="Elixir, Erlang/OTP, and Plainwire">
+  <span class="logo elixir"><img src="assets/elixir-light.svg" alt="" width="583" height="245"></span>
+  <svg class="grid" width="52" height="52" viewBox="26 0 52 52" aria-hidden="true">
+    <circle cx="52" cy="26" r="19.5" fill="#24211e"/>
+    <circle cx="52" cy="26" r="16.5" fill="#f4efe4"/>
+    <circle cx="52" cy="26" r="14.5" fill="#1b3834"/>
+    <g stroke="#f0e2b8" stroke-width="1.05" fill="none">
+      <path d="M41 20.5 H63 M41 26 H63 M41 31.5 H63"/>
+      <path d="M45.5 15 V37 M52 15 V37 M58.5 15 V37"/>
+    </g>
+  </svg>
+  <span class="logo erlang"><img src="assets/erlang-logo.svg" alt="" width="1594" height="1397"></span>
+</span>"""
 
 
 def slug(text: str) -> str:
