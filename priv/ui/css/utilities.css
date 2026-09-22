@@ -1,0 +1,239 @@
+.wg-u-hidden {
+  display: none !important;
+}
+.wg-u-block {
+  display: block !important;
+}
+.wg-u-flex {
+  display: flex !important;
+}
+.wg-u-grid {
+  display: grid !important;
+}
+.wg-u-inline-flex {
+  display: inline-flex !important;
+}
+.wg-u-grow {
+  flex: 1 1 0% !important;
+}
+.wg-u-shrink-0 {
+  flex-shrink: 0 !important;
+}
+.wg-u-min-w-0 {
+  min-width: 0 !important;
+}
+.wg-u-w-full {
+  width: 100% !important;
+}
+.wg-u-h-full {
+  height: 100% !important;
+}
+.wg-u-items-center {
+  align-items: center !important;
+}
+.wg-u-items-end {
+  align-items: flex-end !important;
+}
+.wg-u-justify-between {
+  justify-content: space-between !important;
+}
+.wg-u-justify-center {
+  justify-content: center !important;
+}
+.wg-u-flex-wrap {
+  flex-wrap: wrap !important;
+}
+.wg-u-gap-1 {
+  gap: 4px !important;
+}
+.wg-u-gap-2 {
+  gap: 8px !important;
+}
+.wg-u-gap-3 {
+  gap: 12px !important;
+}
+.wg-u-gap-4 {
+  gap: 16px !important;
+}
+.wg-u-p-1 {
+  padding: 4px !important;
+}
+.wg-u-p-2 {
+  padding: 8px !important;
+}
+.wg-u-p-3 {
+  padding: 12px !important;
+}
+.wg-u-p-4 {
+  padding: 16px !important;
+}
+.wg-u-px-2 {
+  padding-inline: 8px !important;
+}
+.wg-u-px-3 {
+  padding-inline: 12px !important;
+}
+.wg-u-px-4 {
+  padding-inline: 16px !important;
+}
+.wg-u-py-2 {
+  padding-block: 8px !important;
+}
+.wg-u-py-3 {
+  padding-block: 12px !important;
+}
+.wg-u-mt-1 {
+  margin-top: 4px !important;
+}
+.wg-u-mt-2 {
+  margin-top: 8px !important;
+}
+.wg-u-mt-3 {
+  margin-top: 12px !important;
+}
+.wg-u-ml-auto {
+  margin-left: auto !important;
+}
+.wg-u-text-xs {
+  font-size: 11px !important;
+}
+.wg-u-text-sm {
+  font-size: 13px !important;
+}
+.wg-u-text-base {
+  font-size: 15px !important;
+}
+.wg-u-text-lg {
+  font-size: 18px !important;
+}
+.wg-u-font-medium {
+  font-weight: 600 !important;
+}
+.wg-u-font-bold {
+  font-weight: 750 !important;
+}
+.wg-u-text-muted {
+  color: var(--wg-muted) !important;
+}
+.wg-u-text-danger {
+  color: var(--wg-danger) !important;
+}
+.wg-u-text-success {
+  color: var(--wg-success) !important;
+}
+.wg-u-bg-panel {
+  background: var(--wg-panel) !important;
+}
+.wg-u-bg-panel-2 {
+  background: var(--wg-panel-2) !important;
+}
+.wg-u-border {
+  border: 1px solid var(--wg-border) !important;
+}
+.wg-u-border-t {
+  border-top: 1px solid var(--wg-border) !important;
+}
+.wg-u-border-b {
+  border-bottom: 1px solid var(--wg-border) !important;
+}
+.wg-u-rounded {
+  border-radius: var(--wg-r-2) !important;
+}
+.wg-u-rounded-lg {
+  border-radius: var(--wg-r-4) !important;
+}
+.wg-u-rounded-full {
+  border-radius: 999px !important;
+}
+.wg-u-truncate {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.wg-u-overflow-auto {
+  overflow: auto !important;
+}
+.wg-u-relative {
+  position: relative !important;
+}
+.wg-u-absolute {
+  position: absolute !important;
+}
+.wg-u-sticky {
+  position: sticky !important;
+}
+.wg-u-top-0 {
+  top: 0 !important;
+}
+.wg-u-opacity-50 {
+  opacity: 0.5 !important;
+}
+.wg-u-pointer {
+  cursor: pointer !important;
+}
+.wg-u-gap-5 {
+  gap: 20px !important;
+}
+.wg-u-gap-6 {
+  gap: 24px !important;
+}
+.wg-u-p-5 {
+  padding: 20px !important;
+}
+.wg-u-p-6 {
+  padding: 24px !important;
+}
+.wg-u-m-0 {
+  margin: 0 !important;
+}
+.wg-u-mx-auto {
+  margin-inline: auto !important;
+}
+.wg-u-text-center {
+  text-align: center !important;
+}
+.wg-u-text-right {
+  text-align: right !important;
+}
+.wg-u-font-normal {
+  font-weight: 400 !important;
+}
+.wg-u-font-semibold {
+  font-weight: 650 !important;
+}
+.wg-u-leading-tight {
+  line-height: 1.2 !important;
+}
+.wg-u-leading-normal {
+  line-height: 1.5 !important;
+}
+.wg-u-max-w-sm {
+  max-width: 420px !important;
+}
+.wg-u-max-w-md {
+  max-width: 640px !important;
+}
+.wg-u-max-w-lg {
+  max-width: 860px !important;
+}
+.wg-u-shadow {
+  box-shadow: var(--wg-shadow) !important;
+}
+.wg-u-shadow-sm {
+  box-shadow: var(--wg-shadow-sm) !important;
+}
+.wg-u-select-none {
+  user-select: none !important;
+}
+.wg-u-break-words {
+  overflow-wrap: anywhere !important;
+}
+.wg-u-whitespace-pre-wrap {
+  white-space: pre-wrap !important;
+}
+.wg-u-z-dropdown {
+  z-index: var(--wg-z-dropdown) !important;
+}
+.wg-u-z-modal {
+  z-index: var(--wg-z-modal) !important;
+}

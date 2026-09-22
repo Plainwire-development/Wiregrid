@@ -1,0 +1,13 @@
+[data-wg-preset="midnight"] {
+  --wg-bg: #080a0f;
+  --wg-panel: #0d1118;
+  --wg-panel-2: #131923;
+  --wg-panel-3: #1a2230;
+  --wg-elevated: #202a39;
+  --wg-accent: #8b7cff;
+  --wg-accent-hover: #9d91ff;
+  --wg-accent-soft: rgba(139, 124, 255, 0.15);
+  --wg-r-2: 8px;
+  --wg-r-3: 11px;
+  --wg-shadow: 0 20px 70px rgba(0, 0, 0, 0.42);
+}

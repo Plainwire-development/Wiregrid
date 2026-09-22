@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the linux archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          if [[ "$arch" != "x86_64" ]]; then
+            printf 'this workflow publishes linux-x86_64 archives (runner is %s)\n' "$arch" >&2
+            exit 1
+          fi
+          tag="${GITHUB_REF_NAME}"
+          case "$tag" in
+            v*) version="${tag#v}" ;;
+            *) version="$tag" ;;
+          esac
+          stage="${RUNNER_TEMP}/wiregrid-root"
+          rm -rf "$stage"
+          PREFIX="$stage" ./scripts/install.sh
+          mkdir -p "$stage/scripts"
+          cp scripts/install.sh "$stage/scripts/install.sh"
+          chmod +x "$stage/scripts/install.sh"
+          printf '%s\n' "$version" >"$stage/VERSION"
+          printf '%s\n' "linux-x86_64" >"$stage/TARGET"
+          libdir="$stage/lib"
+          if [[ ! -d "$libdir" && -d "$stage/lib64" ]]; then
+            libdir="$stage/lib64"
+          fi
+          lib_name="$(basename "$libdir")"
+          {
+            printf '%s\n' 'prefix=${pcfiledir}/../..'
+            printf '%s\n' 'exec_prefix=${prefix}'
+            printf 'libdir=${prefix}/%s\n' "$lib_name"
+            printf '%s\n' 'includedir=${prefix}/include'
+            printf '\n'
+            printf '%s\n' 'Name: wiregrid'
+            printf '%s\n' 'Description: C client ABI for the Wiregrid realtime gateway'
+            printf 'Version: %s\n' "$version"
+            printf '%s\n' 'Libs: -L${libdir} -lwiregrid'
+            printf '%s\n' 'Cflags: -I${includedir}'
+          } >"$libdir/pkgconfig/wiregrid.pc"
+          mkdir -p dist
+          asset="wiregrid-${version}-linux-x86_64.tar.gz"
+          tar -C "$stage" -czf "dist/${asset}" .
+          (cd dist && sha256sum "$asset" >SHA256SUMS)
+
+      - name: Upload the archive to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/wiregrid-*.tar.gz
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body: |
+            Linux x86_64 archive and SHA256SUMS for this tag.
+            scripts/install.sh checks the checksum when the checksums asset is present.

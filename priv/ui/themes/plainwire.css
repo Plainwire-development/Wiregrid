@@ -1,0 +1,40 @@
+/* Optional Wiregrid theme preset inspired by modern dense realtime chat clients. */
+[data-wg-theme~="plainwire"] {
+  --wg-bg: #0d0f14;
+  --wg-panel: #12151c;
+  --wg-panel-2: #181c25;
+  --wg-panel-3: #202631;
+  --wg-elevated: #242b38;
+  --wg-text: #f5f6fa;
+  --wg-muted: #a0a8b8;
+  --wg-faint: #6f798c;
+  --wg-border: rgba(255, 255, 255, 0.075);
+  --wg-border-strong: rgba(255, 255, 255, 0.13);
+  --wg-accent: #7d72f6;
+  --wg-accent-hover: #9188ff;
+  --wg-accent-soft: rgba(125, 114, 246, 0.16);
+  --wg-r-2: 8px;
+  --wg-r-3: 12px;
+  --wg-r-4: 15px;
+  --wg-sidebar: 268px;
+  --wg-members: 244px;
+}
+.wg-root[data-wg-density="compact"] {
+  --wg-header: 52px;
+  --wg-composer-max: 160px;
+}
+.wg-root[data-wg-density="compact"] .wg-message {
+  padding-block: 3px;
+}
+.wg-root[data-wg-density="compact"] .wg-nav-item {
+  min-height: 32px;
+}
+.wg-root[data-wg-density="cozy"] {
+  --wg-header: 62px;
+}
+.wg-root[data-wg-density="cozy"] .wg-message {
+  padding-block: 9px;
+}
+.wg-root[data-wg-density="cozy"] .wg-nav-item {
+  min-height: 42px;
+}

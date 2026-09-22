@@ -1,0 +1,13 @@
+/_build/
+/deps/
+/cover/
+/doc/
+erl_crash.dump
+*.ez
+.elixir_ls/
+native/c/build/
+native/c/build-ci/
+native/c/libwiregrid.a
+native/c/tests/client_test
+native/c/*.o
+bindings/gleam/build/

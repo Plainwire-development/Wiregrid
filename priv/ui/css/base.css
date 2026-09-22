@@ -1,0 +1,76 @@
+.wg-root,
+.wg-root *,
+.wg-root *::before,
+.wg-root *::after {
+  box-sizing: border-box;
+}
+.wg-root {
+  font-family: var(--wg-font-sans);
+  background: var(--wg-bg);
+  color: var(--wg-text);
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+}
+.wg-root button,
+.wg-root input,
+.wg-root textarea,
+.wg-root select {
+  font: inherit;
+}
+.wg-root button {
+  color: inherit;
+}
+.wg-root a {
+  color: inherit;
+}
+.wg-root img {
+  max-width: 100%;
+}
+.wg-root [hidden] {
+  display: none !important;
+}
+.wg-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.wg-focusable:focus-visible,
+.wg-button:focus-visible,
+.wg-input:focus-visible,
+.wg-nav-item:focus-visible,
+.wg-reaction:focus-visible {
+  outline: 0;
+  box-shadow: var(--wg-focus);
+}
+.wg-scroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.wg-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.wg-scroll::-webkit-scrollbar-thumb {
+  background: var(--wg-border-strong);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.wg-separator {
+  height: 1px;
+  background: var(--wg-border);
+  border: 0;
+}
+.wg-muted {
+  color: var(--wg-muted);
+}
+.wg-faint {
+  color: var(--wg-faint);
+}

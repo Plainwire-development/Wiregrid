@@ -1,0 +1,117 @@
+:root,
+[data-wg-theme="dark"] {
+  color-scheme: dark;
+  --wg-font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --wg-font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --wg-bg: #0b0d12;
+  --wg-panel: #11151d;
+  --wg-panel-2: #171c27;
+  --wg-panel-3: #1e2532;
+  --wg-elevated: #222a39;
+  --wg-text: #f4f7fb;
+  --wg-muted: #98a2b3;
+  --wg-faint: #687386;
+  --wg-border: rgba(255, 255, 255, 0.08);
+  --wg-border-strong: rgba(255, 255, 255, 0.14);
+  --wg-accent: #7c8cff;
+  --wg-accent-hover: #92a0ff;
+  --wg-accent-soft: rgba(124, 140, 255, 0.14);
+  --wg-danger: #ff667a;
+  --wg-warning: #f4b85a;
+  --wg-success: #45d19a;
+  --wg-info: #64b5ff;
+  --wg-overlay: rgba(2, 5, 11, 0.7);
+  --wg-focus: 0 0 0 3px rgba(124, 140, 255, 0.3);
+  --wg-shadow-sm: 0 3px 12px rgba(0, 0, 0, 0.22);
+  --wg-shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+  --wg-r-1: 6px;
+  --wg-r-2: 9px;
+  --wg-r-3: 12px;
+  --wg-r-4: 16px;
+  --wg-r-pill: 999px;
+  --wg-s-0: 0;
+  --wg-s-1: 4px;
+  --wg-s-2: 8px;
+  --wg-s-3: 12px;
+  --wg-s-4: 16px;
+  --wg-s-5: 20px;
+  --wg-s-6: 24px;
+  --wg-s-8: 32px;
+  --wg-s-10: 40px;
+  --wg-sidebar: 272px;
+  --wg-members: 248px;
+  --wg-header: 58px;
+  --wg-composer-max: 220px;
+  --wg-content-max: 920px;
+  --wg-message-max: 760px;
+  --wg-avatar: 40px;
+  --wg-avatar-sm: 28px;
+  --wg-control-h: 38px;
+  --wg-font-xs: 11px;
+  --wg-font-sm: 13px;
+  --wg-font-base: 15px;
+  --wg-font-lg: 18px;
+  --wg-line: 1.45;
+  --wg-line-tight: 1.2;
+  --wg-message-gap: 10px;
+  --wg-message-pad-x: 16px;
+  --wg-message-pad-y: 6px;
+  --wg-transition-fast: 120ms;
+  --wg-transition: 180ms;
+  --wg-z-dropdown: 30;
+  --wg-z-sticky: 40;
+  --wg-z-modal: 70;
+  --wg-z-toast: 90;
+}
+[data-wg-theme="light"] {
+  color-scheme: light;
+  --wg-bg: #f4f6fa;
+  --wg-panel: #fff;
+  --wg-panel-2: #f6f8fb;
+  --wg-panel-3: #edf1f7;
+  --wg-elevated: #fff;
+  --wg-text: #18202d;
+  --wg-muted: #697586;
+  --wg-faint: #98a2b3;
+  --wg-border: rgba(20, 31, 48, 0.1);
+  --wg-border-strong: rgba(20, 31, 48, 0.18);
+  --wg-overlay: rgba(20, 31, 48, 0.38);
+  --wg-shadow-sm: 0 3px 12px rgba(27, 39, 58, 0.1);
+  --wg-shadow: 0 18px 60px rgba(27, 39, 58, 0.16);
+}
+.wg-root[data-wg-density="compact"] {
+  --wg-header: 50px;
+  --wg-composer-max: 150px;
+  --wg-avatar: 34px;
+  --wg-control-h: 32px;
+  --wg-message-gap: 7px;
+  --wg-message-pad-y: 3px;
+}
+.wg-root[data-wg-density="compact"] .wg-message {
+  padding-block: 2px;
+}
+.wg-root[data-wg-density="compact"] .wg-nav-item {
+  min-height: 31px;
+}
+.wg-root[data-wg-density="comfortable"] {
+  --wg-header: 58px;
+  --wg-composer-max: 220px;
+  --wg-avatar: 40px;
+  --wg-control-h: 38px;
+  --wg-message-gap: 10px;
+  --wg-message-pad-y: 6px;
+}
+.wg-root[data-wg-density="cozy"] {
+  --wg-header: 64px;
+  --wg-composer-max: 280px;
+  --wg-avatar: 44px;
+  --wg-control-h: 42px;
+  --wg-message-gap: 12px;
+  --wg-message-pad-y: 9px;
+}
+.wg-root[data-wg-density="cozy"] .wg-message {
+  padding-block: 10px;
+}

@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "26.2"
+            elixir: "1.17.3"
+          - otp: "27.3"
+            elixir: "1.18.4"
+          - otp: "28.5"
+            elixir: "1.20.4"
+          - otp: "29.1"
+            elixir: "1.20.4"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - run: mix local.hex --force
+      - run: mix local.rebar --force
+      - run: mix deps.get
+      - run: ./scripts/verify.sh
+      - run: USERS=100 TOPICS=10 MESSAGES=1000 ./scripts/load.sh
+
+  adapters:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: wiregrid
+          POSTGRES_PASSWORD: wiregrid
+          POSTGRES_DB: wiregrid
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U wiregrid"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      WIREGRID_POSTGRES_URL: ecto://wiregrid:wiregrid@127.0.0.1:5432/wiregrid
+      WIREGRID_REDIS_URL: redis://127.0.0.1:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.3"
+          elixir-version: "1.18.4"
+      - run: mix local.hex --force
+      - run: mix local.rebar --force
+      - run: mix deps.get
+      - run: MIX_ENV=test mix test --include integration --exclude scylla_integration test/integration
+
+  bindings:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1"
+          elixir-version: "1.20.4"
+          gleam-version: "1.18.1"
+          rebar3-version: "3"
+      - run: mix local.hex --force
+      - run: mix local.rebar --force
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: WIREGRID_REQUIRE_GLEAM=1 ./scripts/check-gleam.sh
+      - name: Build pinned LFE compiler
+        run: |
+          git clone --depth 1 --branch v2.2.2 https://github.com/lfe/lfe.git /tmp/wiregrid-lfe
+          make -C /tmp/wiregrid-lfe compile
+      - name: Compile all LFE bindings
+        run: PATH="/tmp/wiregrid-lfe/bin:$PATH" WIREGRID_REQUIRE_LFE=1 ./scripts/check-lfe.sh
+
+  native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: strict c build and protocol test
+        run: make -C native/c clean test
+      - name: cmake build and test
+        run: |
+          cmake -S native/c -B native/c/build-ci -DBUILD_TESTING=ON
+          cmake --build native/c/build-ci --parallel
+          ctest --test-dir native/c/build-ci --output-on-failure
+      - name: clang address and undefined behavior sanitizers
+        run: |
+          make -C native/c clean
+          make -C native/c test \
+            CC=clang \
+            CFLAGS='-O1 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -fno-omit-frame-pointer -fsanitize=address,undefined'
+
+  scylla-adapter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.3"
+          elixir-version: "1.18.4"
+      - run: mix local.hex --force
+      - run: mix local.rebar --force
+      - run: mix deps.get
+      - name: start scylla
+        run: docker compose -f compose.test.yml up -d scylla
+      - name: wait for cql
+        run: |
+          ready=0
+          for _ in $(seq 1 90); do
+            if docker compose -f compose.test.yml exec -T scylla cqlsh -e 'select release_version from system.local' >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            docker compose -f compose.test.yml logs scylla
+            exit 1
+          fi
+      - name: scylla integration test
+        env:
+          WIREGRID_SCYLLA_NODE: 127.0.0.1:9042
+        run: MIX_ENV=test mix test --include scylla_integration test/integration/scylla_test.exs
+      - if: always()
+        run: docker compose -f compose.test.yml down -v

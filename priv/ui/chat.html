@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-wg-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wiregrid</title>
+  <link rel="stylesheet" href="wiregrid.css">
+</head>
+<body>
+  <div class="wg-root wg-app" data-wg-density="comfortable">
+    <aside class="wg-sidebar">
+      <div class="wg-nav-heading">rooms</div>
+      <nav class="wg-nav" aria-label="channels">
+        <button class="wg-nav-item" type="button" aria-current="page">
+          <span class="wg-channel-prefix">#</span>
+          <span class="wg-nav-item__label">general</span>
+        </button>
+        <button class="wg-nav-item" type="button">
+          <span class="wg-channel-prefix">#</span>
+          <span class="wg-nav-item__label">shipping</span>
+        </button>
+      </nav>
+    </aside>
+    <main class="wg-main">
+      <header class="wg-header">
+        <div class="wg-header__grow">
+          <div class="wg-title"># general</div>
+          <div class="wg-muted wg-u-text-sm">day to day</div>
+        </div>
+        <button class="wg-icon-button" type="button" data-wg-theme-toggle aria-label="toggle theme">theme</button>
+      </header>
+      <div class="wg-connection-banner" data-state="online" data-wg-connection>connected</div>
+      <div class="wg-messages wg-scroll" id="messages" aria-live="polite"></div>
+      <div class="wg-typing" id="typing"></div>
+      <form class="wg-composer-wrap" id="composer">
+        <div class="wg-composer">
+          <textarea rows="1" placeholder="message #general" aria-label="message"></textarea>
+          <button class="wg-button wg-button--primary wg-button--sm" type="submit">send</button>
+        </div>
+      </form>
+    </main>
+    <aside class="wg-members" aria-label="members">
+      <div class="wg-nav-heading">online</div>
+      <div class="wg-member"><span class="wg-presence" data-state="online"></span><span class="wg-member__name">ada</span></div>
+      <div class="wg-member"><span class="wg-presence" data-state="idle"></span><span class="wg-member__name">lin</span></div>
+    </aside>
+  </div>
+  <script type="module">
+    import { appendMessage, bindComposer, bindChatActions, connectChat, setTheme } from "./wiregrid.esm.js";
+
+    const messages = document.querySelector("#messages");
+    const typing = document.querySelector("#typing");
+    appendMessage(messages, { id: "m1", author: "ada", body: "shipped the gateway auth change", time: "09:14" });
+    appendMessage(messages, { id: "m2", author: "lin", body: "general is the same channel from elixir and from C", time: "09:16" });
+    bindChatActions(messages, {
+      action(name, node) { if (name === "reply") node?.querySelector(".wg-message-body")?.focus?.(); }
+    });
+    bindComposer(document.querySelector("#composer"), {
+      onSubmit(body) {
+        const node = appendMessage(messages, { id: "local-" + Date.now(), author: "you", body });
+        messages.scrollTop = messages.scrollHeight;
+        if (window.__wg) window.__wg.say("general", body).catch(() => { node.dataset.failed = "true"; });
+      }
+    });
+    document.querySelector("[data-wg-theme-toggle]").addEventListener("click", () => {
+      const next = document.documentElement.dataset.wgTheme === "light" ? "dark" : "light";
+      setTheme(next);
+    });
+
+    const params = new URLSearchParams(location.search);
+    const socketUrl = params.get("socket");
+    if (socketUrl) {
+      const banner = document.querySelector("[data-wg-connection]");
+      banner.dataset.state = "offline";
+      banner.textContent = "connecting";
+      const client = connectChat(socketUrl, {
+        onReady() { banner.dataset.state = "online"; banner.textContent = "connected"; },
+        onEvent(message) {
+          const event = message.event || {};
+          if (event.type === "typing") {
+            typing.textContent = event.active ? "someone is typing" : "";
+            return;
+          }
+          if (event.type === "message") {
+            appendMessage(messages, { id: message.delivery_id, author: event.author || "member", body: event.body || "", time: "" });
+            messages.scrollTop = messages.scrollHeight;
+          }
+          if (message.delivery_id) client.ack(message.delivery_id);
+        },
+        onClose() { banner.dataset.state = "offline"; banner.textContent = "offline"; }
+      });
+      window.__wg = client;
+      client.subscribe("general").catch(() => { banner.textContent = "could not join general"; });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+.wg-app {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: var(--wg-sidebar) minmax(0, 1fr) var(--wg-members);
+  background: var(--wg-bg);
+}
+.wg-sidebar,
+.wg-members {
+  min-width: 0;
+  background: var(--wg-panel);
+}
+.wg-sidebar {
+  border-right: 1px solid var(--wg-border);
+}
+.wg-members {
+  border-left: 1px solid var(--wg-border);
+}
+.wg-main {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.012),
+    transparent 220px
+  );
+}
+.wg-header {
+  min-height: var(--wg-header);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--wg-border);
+  background: color-mix(in srgb, var(--wg-panel) 86%, transparent);
+  backdrop-filter: blur(14px);
+  position: relative;
+  z-index: 2;
+}
+.wg-header__grow {
+  flex: 1;
+  min-width: 0;
+}
+.wg-title {
+  font-weight: 750;
+  letter-spacing: -0.018em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wg-pane {
+  min-width: 0;
+  min-height: 0;
+}
+.wg-stack {
+  display: flex;
+  flex-direction: column;
+}
+.wg-inline {
+  display: flex;
+  align-items: center;
+}
+.wg-cluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wg-split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wg-center {
+  display: grid;
+  place-items: center;
+}
+.wg-container {
+  width: min(100%, 1200px);
+  margin-inline: auto;
+}
+.wg-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--wg-overlay);
+  z-index: var(--wg-z-modal);
+}
+@media (max-width: 1040px) {
+  .wg-app {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+  .wg-members {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .wg-app {
+    display: block;
+  }
+  .wg-sidebar {
+    display: none;
+  }
+  .wg-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--wg-z-sticky);
+  }
+}

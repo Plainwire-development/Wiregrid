@@ -1,0 +1,52 @@
+{
+  "name": "@wiregrid/ui",
+  "version": "1.0.0",
+  "description": "Framework-neutral chat UI primitives and browser helpers for Wiregrid",
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "css/*.css",
+    "themes/*.css",
+    "presets/*.css"
+  ],
+  "main": "wiregrid.js",
+  "module": "wiregrid.esm.js",
+  "types": "wiregrid.d.ts",
+  "exports": {
+    ".": {
+      "types": "./wiregrid.d.ts",
+      "import": "./wiregrid.esm.js",
+      "default": "./wiregrid.esm.js"
+    },
+    "./css": "./wiregrid.css",
+    "./global": "./wiregrid.js",
+    "./core": "./js/core.js",
+    "./chat": "./js/chat.js",
+    "./composer": "./js/composer.js",
+    "./overlays": "./js/overlays.js",
+    "./liveview": "./js/liveview.js",
+    "./client": "./js/client.js",
+    "./tokens.css": "./css/tokens.css",
+    "./base.css": "./css/base.css",
+    "./layout.css": "./css/layout.css",
+    "./components.css": "./css/components.css",
+    "./chat.css": "./css/chat.css",
+    "./utilities.css": "./css/utilities.css",
+    "./motion.css": "./css/motion.css",
+    "./plainwire.css": "./themes/plainwire.css",
+    "./preset-midnight.css": "./presets/midnight.css",
+    "./preset-soft.css": "./presets/soft.css",
+    "./layers.css": "./wiregrid.layers.css"
+  },
+  "files": [
+    "wiregrid.css",
+    "wiregrid.layers.css",
+    "wiregrid.js",
+    "wiregrid.esm.js",
+    "wiregrid.d.ts",
+    "css",
+    "js",
+    "themes",
+    "presets"
+  ]
+}

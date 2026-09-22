@@ -1,0 +1,42 @@
+@keyframes wg-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes wg-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.975) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes wg-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.wg-animate-fade {
+  animation: wg-fade-in 0.16s ease both;
+}
+.wg-animate-pop {
+  animation: wg-pop-in 0.16s ease both;
+}
+.wg-animate-pulse {
+  animation: wg-pulse 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wg-root *,
+  .wg-root *::before,
+  .wg-root *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

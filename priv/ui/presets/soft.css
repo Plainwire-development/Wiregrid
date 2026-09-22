@@ -1,0 +1,10 @@
+[data-wg-preset="soft"] {
+  --wg-r-1: 8px;
+  --wg-r-2: 12px;
+  --wg-r-3: 16px;
+  --wg-r-4: 22px;
+  --wg-sidebar: 284px;
+  --wg-members: 260px;
+  --wg-accent: #6f7bf7;
+  --wg-shadow: 0 16px 50px rgba(0, 0, 0, 0.2);
+}
