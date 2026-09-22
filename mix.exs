@@ -48,7 +48,7 @@ defmodule Wiregrid.MixProject do
       {:xandra, "~> 0.19.4", only: :test},
       # Cowboy 2.19 pulls Cowlib 2.20, whose `maybe` syntax does not compile on
       # OTP 26. 2.18 plus Cowlib 2.19 keeps the Elixir 1.17 / OTP 26 job green.
-      {:cowboy, "~> 2.18.0", only: :test},
+      {:cowboy, "~> 2.19.0", only: :test},
       {:cowlib, "~> 2.19.0", only: :test, override: true},
       {:stream_data, "~> 1.4", only: :test}
     ]
