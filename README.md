@@ -161,3 +161,7 @@ make -C native/c test
 ```
 
 `docs/getting-started.md` is the short setup guide. `docs/architecture.md`, `docs/configuration.md`, `docs/security.md`, and `docs/operations.md` are the ones worth reading before you put real traffic on it.
+
+# Current Support
+
+current support is targeted to Linux development environments, and Linux servers. Support for other platforms will come soon.
