@@ -3,6 +3,8 @@
 <p><code>native/c</code> is a client library, not a NIF. It speaks TCP to <code>Wiregrid.Foreign.Gateway</code>. A fault in the C, Rust, Zig, Go, Python, Java, or .NET process stays in that process. The client never sees ETS table ids, pids, or Erlang external term layout. A subscribed C client on <code>general</code> is on the same channel as <code>MyApp.Chat.join(session, "general")</code>.</p>
 
 <h2>Framing</h2>
+<p>Each connection has a 5-second absolute hello deadline, at most 5 failed authentication attempts, and a default limit of 240 inbound frames per 60-second window. Tune <code>handshake_timeout_ms</code>, <code>max_auth_attempts</code>, <code>frame_rate_limit</code> and <code>frame_window_ms</code> for the deployment; acknowledgements count as frames. Worker crashes release admission slots, and gateway shutdown closes existing clients. <code>debug: true</code> logs only counts and fixed failure reasons.</p>
+<p>C ABI minor 2 adds <code>wg_client_fd</code> and <code>wg_pending_events</code> for event-loop integration. Requests use total deadlines and close the stream after a timeout or protocol error; a timed-out publish may already be committed. Poll timeouts preserve partial frames and zero-timeout polls never block. History limits stop at 100, and undersized payload/cursor buffers return <code>WG_ERR_OVERFLOW</code> without truncating cursors or closing the stream. Retry history with larger buffers and the same input cursor.</p>
 <p>The socket is Erlang <code>gen_tcp</code> with <code>packet: 4</code>: a 4-byte big-endian length, then one frame. Inside the frame:</p>
 <table>
   <thead><tr><th>Bytes</th><th>Field</th></tr></thead>

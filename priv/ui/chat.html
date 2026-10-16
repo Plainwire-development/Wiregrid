@@ -46,20 +46,25 @@
     </aside>
   </div>
   <script type="module">
-    import { appendMessage, bindComposer, bindChatActions, connectChat, setTheme } from "./wiregrid.esm.js";
+    import { createTimeline, bindComposer, bindChatActions, connectChat, setTheme } from "./wiregrid.esm.js";
 
     const messages = document.querySelector("#messages");
+    const timeline = createTimeline(messages);
     const typing = document.querySelector("#typing");
-    appendMessage(messages, { id: "m1", author: "ada", body: "shipped the gateway auth change", time: "09:14" });
-    appendMessage(messages, { id: "m2", author: "lin", body: "general is the same channel from elixir and from C", time: "09:16" });
+    timeline.append({ id: "m1", author: "ada", body: "shipped the gateway auth change", time: "09:14" });
+    timeline.append({ id: "m2", author: "lin", body: "general is the same channel from elixir and from C", time: "09:16" });
     bindChatActions(messages, {
       action(name, node) { if (name === "reply") node?.querySelector(".wg-message-body")?.focus?.(); }
     });
     bindComposer(document.querySelector("#composer"), {
-      onSubmit(body) {
-        const node = appendMessage(messages, { id: "local-" + Date.now(), author: "you", body });
-        messages.scrollTop = messages.scrollHeight;
-        if (window.__wg) window.__wg.say("general", body).catch(() => { node.dataset.failed = "true"; });
+      async onSubmit(body) {
+        if (window.__wg) await window.__wg.say("general", body);
+        else timeline.append({ id: "local-" + Date.now(), author: "you", body });
+      },
+      onError() {
+        const banner = document.querySelector("[data-wg-connection]");
+        banner.dataset.state = "offline";
+        banner.textContent = "message was not sent; try again";
       }
     });
     document.querySelector("[data-wg-theme-toggle]").addEventListener("click", () => {
@@ -75,18 +80,17 @@
       banner.textContent = "connecting";
       const client = connectChat(socketUrl, {
         onReady() { banner.dataset.state = "online"; banner.textContent = "connected"; },
-        onEvent(message) {
+        async onEvent(message) {
           const event = message.event || {};
           if (event.type === "typing") {
             typing.textContent = event.active ? "someone is typing" : "";
-            return;
           }
           if (event.type === "message") {
-            appendMessage(messages, { id: message.delivery_id, author: event.author || "member", body: event.body || "", time: "" });
-            messages.scrollTop = messages.scrollHeight;
+            timeline.upsert({ id: message.event_id || message.delivery_id, author: event.author || "member", body: event.body || "", time: "" });
           }
-          if (message.delivery_id) client.ack(message.delivery_id);
+          if (message.delivery_id) await client.ack(message.delivery_id);
         },
+        onError() { banner.dataset.state = "offline"; banner.textContent = "connection or request failed"; },
         onClose() { banner.dataset.state = "offline"; banner.textContent = "offline"; }
       });
       window.__wg = client;

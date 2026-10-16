@@ -19,5 +19,6 @@ defmodule Wiregrid.ForeignProtocolTest do
              Protocol.encode(0, Protocol.op(:subscribe), 1, [{tag, "a"}, {tag, "b"}])
 
     assert {:error, {:unsupported_protocol, 99}} = Protocol.decode(<<99, 0, 1, 0, 0, 0, 1>>)
+    assert {:error, :invalid_tlv} = Protocol.decode(<<1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0>>)
   end
 end

@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <poll.h>
@@ -11,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #ifndef MSG_NOSIGNAL
@@ -66,6 +68,11 @@ struct wg_client {
   size_t queue_cap;
   size_t queue_head;
   size_t queue_len;
+  uint8_t read_header[4];
+  size_t read_header_len;
+  uint8_t *read_body;
+  size_t read_body_len;
+  size_t read_body_received;
 };
 
 typedef struct wg_field_view {
@@ -93,41 +100,78 @@ static int connect_fail(int code, char *error, size_t error_cap) {
   return code;
 }
 
-static int wait_fd(int fd, short events, uint32_t timeout_ms) {
-  struct pollfd p = {.fd = fd, .events = events, .revents = 0};
-  int rc;
-  do { rc = poll(&p, 1, (int)timeout_ms); } while (rc < 0 && errno == EINTR);
-  if (rc == 0) return WG_ERR_TIMEOUT;
-  if (rc < 0) return WG_ERR_IO;
-  if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) return WG_ERR_CLOSED;
-  return WG_OK;
+static uint64_t now_ms(void) {
+  struct timespec now = {0};
+  (void)clock_gettime(CLOCK_MONOTONIC, &now);
+  return (uint64_t)now.tv_sec * 1000u + (uint64_t)now.tv_nsec / 1000000u;
 }
 
-static int write_all(wg_client *c, const uint8_t *buf, size_t len) {
+static void close_socket(wg_client *c) {
+  if (c->fd >= 0) { shutdown(c->fd, SHUT_RDWR); close(c->fd); c->fd = -1; }
+  free(c->read_body);
+  c->read_body = NULL;
+  c->read_header_len = c->read_body_len = c->read_body_received = 0;
+}
+
+static int stream_error(wg_client *c, int code) {
+  set_error(c, wg_result_string(code));
+  close_socket(c);
+  return code;
+}
+
+static int wait_fd(int fd, short events, uint64_t deadline) {
+  struct pollfd p = {.fd = fd, .events = events, .revents = 0};
+  int rc;
+  for (;;) {
+    uint64_t now = now_ms();
+    uint64_t remaining = deadline > now ? deadline - now : 0;
+    int timeout = remaining > INT_MAX ? INT_MAX : (int)remaining;
+    rc = poll(&p, 1, timeout);
+    if (rc >= 0 || errno != EINTR) break;
+    if (now_ms() >= deadline) return WG_ERR_TIMEOUT;
+  }
+  if (rc == 0) return WG_ERR_TIMEOUT;
+  if (rc < 0) return WG_ERR_IO;
+  /* A final readable frame may accompany POLLHUP. Drain it before EOF. */
+  if (p.revents & events) return WG_OK;
+  if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) return WG_ERR_CLOSED;
+  return WG_ERR_IO;
+}
+
+static int write_all(wg_client *c, const uint8_t *buf, size_t len, uint64_t deadline) {
   if (!c || c->fd < 0) return WG_ERR_CLOSED;
   size_t off = 0;
   while (off < len) {
-    int ready = wait_fd(c->fd, POLLOUT, c->timeout_ms);
-    if (ready != WG_OK) return ready;
+    if (now_ms() >= deadline) return WG_ERR_TIMEOUT;
     ssize_t n = send(c->fd, buf + off, len - off, MSG_NOSIGNAL);
     if (n < 0 && errno == EINTR) continue;
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      int ready = wait_fd(c->fd, POLLOUT, deadline);
+      if (ready != WG_OK) return ready;
+      continue;
+    }
     if (n <= 0) return WG_ERR_IO;
     off += (size_t)n;
   }
   return WG_OK;
 }
 
-static int read_all(wg_client *c, uint8_t *buf, size_t len, uint32_t timeout_ms) {
+static int read_into(wg_client *c, uint8_t *buf, size_t len, size_t *received,
+                     uint64_t deadline, int nonblocking) {
   if (!c || c->fd < 0) return WG_ERR_CLOSED;
-  size_t off = 0;
-  while (off < len) {
-    int ready = wait_fd(c->fd, POLLIN, timeout_ms);
-    if (ready != WG_OK) return ready;
-    ssize_t n = recv(c->fd, buf + off, len - off, 0);
+  while (*received < len) {
+    if (!nonblocking && now_ms() >= deadline) return WG_ERR_TIMEOUT;
+    ssize_t n = recv(c->fd, buf + *received, len - *received, 0);
     if (n < 0 && errno == EINTR) continue;
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      if (nonblocking) return WG_ERR_TIMEOUT;
+      int ready = wait_fd(c->fd, POLLIN, deadline);
+      if (ready != WG_OK) return ready;
+      continue;
+    }
     if (n == 0) return WG_ERR_CLOSED;
     if (n < 0) return WG_ERR_IO;
-    off += (size_t)n;
+    *received += (size_t)n;
   }
   return WG_OK;
 }
@@ -156,7 +200,7 @@ static int append_field(uint8_t *buf, size_t cap, size_t *len, uint8_t tag,
 }
 
 static int send_request(wg_client *c, uint8_t op, uint32_t request_id,
-                        const uint8_t *fields, size_t fields_len) {
+                        const uint8_t *fields, size_t fields_len, uint64_t deadline) {
   size_t frame_len = 7u + fields_len;
   if (frame_len > WG_MAX_FRAME) return WG_ERR_OVERFLOW;
   uint8_t *packet = malloc(4u + frame_len);
@@ -167,28 +211,33 @@ static int send_request(wg_client *c, uint8_t op, uint32_t request_id,
   packet[6] = op;
   put_u32(packet + 7, request_id);
   if (fields_len) memcpy(packet + 11, fields, fields_len);
-  int rc = write_all(c, packet, 4u + frame_len);
+  int rc = write_all(c, packet, 4u + frame_len, deadline);
   free(packet);
   return rc;
 }
 
-static int read_frame(wg_client *c, uint32_t timeout_ms, uint8_t **out, size_t *out_len) {
-  uint8_t length[4];
-  int rc = read_all(c, length, 4, timeout_ms);
+static int read_frame(wg_client *c, uint64_t deadline, int nonblocking,
+                      uint8_t **out, size_t *out_len) {
+  int rc = read_into(c, c->read_header, 4, &c->read_header_len, deadline, nonblocking);
   if (rc != WG_OK) return rc;
-  uint32_t len = get_u32(length);
-  if (len < 7 || len > WG_MAX_FRAME) return WG_ERR_PROTOCOL;
-  uint8_t *buf = malloc(len);
-  if (!buf) return WG_ERR_MEMORY;
-  rc = read_all(c, buf, len, timeout_ms);
-  if (rc != WG_OK) { free(buf); return rc; }
-  *out = buf;
-  *out_len = len;
+  if (!c->read_body) {
+    uint32_t len = get_u32(c->read_header);
+    if (len < 7 || len > WG_MAX_FRAME) return WG_ERR_PROTOCOL;
+    c->read_body = malloc(len);
+    if (!c->read_body) return WG_ERR_MEMORY;
+    c->read_body_len = len;
+  }
+  rc = read_into(c, c->read_body, c->read_body_len, &c->read_body_received, deadline, nonblocking);
+  if (rc != WG_OK) return rc;
+  *out = c->read_body;
+  *out_len = c->read_body_len;
+  c->read_body = NULL;
+  c->read_header_len = c->read_body_len = c->read_body_received = 0;
   return WG_OK;
 }
 
 static int parse_frame(const uint8_t *buf, size_t len, wg_frame_view *out) {
-  if (!buf || !out || len < 7 || buf[0] != WG_PROTOCOL_VERSION) return WG_ERR_PROTOCOL;
+  if (!buf || !out || len < 7 || buf[0] != WG_PROTOCOL_VERSION || buf[1] > WG_KIND_EVENT) return WG_ERR_PROTOCOL;
   memset(out, 0, sizeof(*out));
   out->kind = buf[1];
   out->op = buf[2];
@@ -197,6 +246,7 @@ static int parse_frame(const uint8_t *buf, size_t len, wg_frame_view *out) {
   while (off < len) {
     if (out->field_count >= WG_MAX_FIELDS || len - off < 5) return WG_ERR_PROTOCOL;
     uint8_t tag = buf[off++];
+    if (!tag) return WG_ERR_PROTOCOL;
     uint32_t field_len = get_u32(buf + off);
     off += 4;
     if (field_len > WG_MAX_FIELD || field_len > len - off) return WG_ERR_PROTOCOL;
@@ -236,7 +286,7 @@ static int event_from_frame(const wg_frame_view *frame, wg_event *out) {
   memset(out, 0, sizeof(*out));
   const wg_field_view *topic = field(frame, WG_F_TOPIC);
   const wg_field_view *payload = field(frame, WG_F_PAYLOAD);
-  if (!topic || !payload) return WG_ERR_PROTOCOL;
+  if (frame->op != WG_OP_EVENT || frame->request_id != 0 || !topic || !payload) return WG_ERR_PROTOCOL;
   out->topic = dup_field(topic);
   out->content_type = dup_field(field(frame, WG_F_CONTENT_TYPE));
   out->delivery_id = dup_field(field(frame, WG_F_DELIVERY_ID));
@@ -246,7 +296,10 @@ static int event_from_frame(const wg_frame_view *frame, wg_event *out) {
     if (out->payload) memcpy(out->payload, payload->data, payload->len);
   }
   out->payload_len = payload->len;
-  if (!out->topic || (payload->len && !out->payload)) {
+  if (!out->topic || (payload->len && !out->payload) ||
+      (field(frame, WG_F_CONTENT_TYPE) && !out->content_type) ||
+      (field(frame, WG_F_DELIVERY_ID) && !out->delivery_id) ||
+      (field(frame, WG_F_EVENT_ID) && !out->event_id)) {
     wg_event_free(out);
     return WG_ERR_MEMORY;
   }
@@ -256,9 +309,7 @@ static int event_from_frame(const wg_frame_view *frame, wg_event *out) {
 static int queue_event(wg_client *c, const wg_frame_view *frame) {
   if (c->queue_len == c->queue_cap) {
     set_error(c, "event queue full; connection closed to preserve protocol ordering");
-    shutdown(c->fd, SHUT_RDWR);
-    close(c->fd);
-    c->fd = -1;
+    close_socket(c);
     return WG_ERR_OVERFLOW;
   }
   size_t slot = (c->queue_head + c->queue_len) % c->queue_cap;
@@ -279,35 +330,42 @@ static int pop_event(wg_client *c, wg_event *out) {
 static int request(wg_client *c, uint8_t op, const uint8_t *fields, size_t fields_len,
                    wg_frame_view *response, uint8_t **response_buf) {
   if (!c) return WG_ERR_ARGUMENT;
+  if (c->fd < 0) return WG_ERR_CLOSED;
+  c->error[0] = '\0';
+  uint64_t deadline = now_ms() + c->timeout_ms;
   uint32_t id = ++c->next_request_id;
-  int rc = send_request(c, op, id, fields, fields_len);
-  if (rc != WG_OK) return rc;
+  int rc = send_request(c, op, id, fields, fields_len, deadline);
+  if (rc != WG_OK) {
+    if (rc == WG_ERR_MEMORY || rc == WG_ERR_OVERFLOW) return rc;
+    return stream_error(c, rc);
+  }
 
   for (;;) {
     uint8_t *buf = NULL;
     size_t len = 0;
-    rc = read_frame(c, c->timeout_ms, &buf, &len);
-    if (rc != WG_OK) return rc;
+    rc = read_frame(c, deadline, 0, &buf, &len);
+    if (rc != WG_OK) return stream_error(c, rc);
     wg_frame_view frame;
     rc = parse_frame(buf, len, &frame);
-    if (rc != WG_OK) { free(buf); return rc; }
+    if (rc != WG_OK) { free(buf); return stream_error(c, rc); }
 
     if (frame.kind == WG_KIND_EVENT) {
       rc = queue_event(c, &frame);
       free(buf);
-      if (rc != WG_OK) return rc;
+      if (rc != WG_OK) return stream_error(c, rc);
       continue;
     }
 
     if (frame.kind != WG_KIND_RESPONSE || frame.request_id != id || frame.op != op) {
       free(buf);
-      set_error(c, "protocol error");
-      if (c->fd >= 0) { shutdown(c->fd, SHUT_RDWR); close(c->fd); c->fd = -1; }
-      return WG_ERR_PROTOCOL;
+      return stream_error(c, WG_ERR_PROTOCOL);
     }
 
     const wg_field_view *status = field(&frame, WG_F_STATUS);
-    if (!status || status->len == 0) { free(buf); return WG_ERR_PROTOCOL; }
+    if (!status || !((status->len == 2 && memcmp(status->data, "ok", 2) == 0) ||
+                     (status->len == 5 && memcmp(status->data, "error", 5) == 0))) {
+      free(buf); return stream_error(c, WG_ERR_PROTOCOL);
+    }
     if (!(status->len == 2 && memcmp(status->data, "ok", 2) == 0)) {
       const wg_field_view *err = field(&frame, WG_F_ERROR);
       if (err) {
@@ -359,6 +417,7 @@ static int dial(const char *host, uint16_t port, uint32_t timeout_ms) {
   hints.ai_family = AF_UNSPEC; hints.ai_socktype = SOCK_STREAM;
   struct addrinfo *res = NULL;
   if (getaddrinfo(host, service, &hints, &res) != 0) return -1;
+  uint64_t deadline = now_ms() + timeout_ms;
   int fd = -1;
   for (struct addrinfo *it = res; it; it = it->ai_next) {
     fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
@@ -366,13 +425,16 @@ static int dial(const char *host, uint16_t port, uint32_t timeout_ms) {
     if (set_blocking(fd, 0) != 0) { close(fd); fd = -1; continue; }
     int connected = connect(fd, it->ai_addr, it->ai_addrlen);
     if (connected < 0 && errno == EINPROGRESS) {
-      if (wait_fd(fd, POLLOUT, timeout_ms) != WG_OK) { close(fd); fd = -1; continue; }
+      if (wait_fd(fd, POLLOUT, deadline) != WG_OK) { close(fd); fd = -1; continue; }
       int soerr = 0; socklen_t sl = sizeof(soerr);
       if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &sl) < 0 || soerr != 0) { close(fd); fd = -1; continue; }
       connected = 0;
     }
-    if (connected == 0 && set_blocking(fd, 1) == 0) {
+    if (connected == 0) {
       int one = 1;
+#ifdef SO_NOSIGPIPE
+      (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#endif
       (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
       (void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
       break;
@@ -387,10 +449,13 @@ int wg_connect_ex(const char *host, uint16_t port, const char *user_id,
                   const wg_client_options *options, wg_client **out_client,
                   char *error, size_t error_cap) {
   if (error && error_cap) error[0] = '\0';
+  if (out_client) *out_client = NULL;
   if (!host || !user_id || !out_client) return connect_fail(WG_ERR_ARGUMENT, error, error_cap);
   wg_client_options defaults; wg_client_options_init(&defaults);
   const wg_client_options *o = options ? options : &defaults;
   if (!o->event_queue_capacity || o->event_queue_capacity > 1000000u) return connect_fail(WG_ERR_ARGUMENT, error, error_cap);
+  size_t n = strlen(user_id), token_len = o->auth_token ? strlen(o->auth_token) : 0;
+  if (!n || n > WG_MAX_FIELD || token_len > WG_MAX_FIELD) return connect_fail(WG_ERR_ARGUMENT, error, error_cap);
   uint32_t timeout_ms = o->timeout_ms ? o->timeout_ms : 5000;
   int fd = dial(host, port, timeout_ms);
   if (fd < 0) return connect_fail(WG_ERR_IO, error, error_cap);
@@ -400,7 +465,7 @@ int wg_connect_ex(const char *host, uint16_t port, const char *user_id,
   c->queue_cap = o->event_queue_capacity;
   c->queue = calloc(c->queue_cap, sizeof(*c->queue));
   if (!c->queue) { close(fd); free(c); return connect_fail(WG_ERR_MEMORY, error, error_cap); }
-  size_t n = strlen(user_id), token_len = o->auth_token ? strlen(o->auth_token) : 0, len = 0;
+  size_t len = 0;
   size_t fields_cap = 5u + n + (o->auth_token ? 5u + token_len : 0u);
   uint8_t *fields = malloc(fields_cap);
   if (!fields) { wg_close(c); return connect_fail(WG_ERR_MEMORY, error, error_cap); }
@@ -425,7 +490,7 @@ int wg_connect(const char *host, uint16_t port, const char *user_id,
 
 void wg_close(wg_client *c) {
   if (!c) return;
-  if (c->fd >= 0) { shutdown(c->fd, SHUT_RDWR); close(c->fd); }
+  close_socket(c);
   for (size_t i = 0; i < c->queue_cap; i++) wg_event_free(&c->queue[i].value);
   free(c->queue); free(c);
 }
@@ -475,7 +540,9 @@ int wg_ping(wg_client *c, char *server_version, size_t version_cap) {
 
 int wg_history(wg_client *c, const char *topic, const char *cursor, uint32_t limit,
               void *out, size_t out_cap, size_t *out_len, char *next_cursor, size_t next_cursor_cap) {
-  if (!c || !topic || !out || !out_len || limit > 1000u) return WG_ERR_ARGUMENT;
+  if (out_len) *out_len = 0;
+  if (next_cursor && next_cursor_cap) next_cursor[0] = '\0';
+  if (!c || !topic || !out || !out_len || limit > 100u) return WG_ERR_ARGUMENT;
   size_t topic_len = strlen(topic);
   size_t cursor_len = cursor ? strlen(cursor) : 0;
   char limit_buf[16];
@@ -496,15 +563,19 @@ int wg_history(wg_client *c, const char *topic, const char *cursor, uint32_t lim
   if (rc == WG_OK) rc = request(c, WG_OP_HISTORY, fields, len, &response, &buf);
   if (rc == WG_OK) {
     const wg_field_view *payload = field(&response, WG_F_PAYLOAD);
-    if (!payload) rc = WG_ERR_PROTOCOL;
-    else if (payload->len > out_cap) rc = WG_ERR_OVERFLOW;
+    const wg_field_view *next = field(&response, WG_F_CURSOR);
+    if (!payload) rc = stream_error(c, WG_ERR_PROTOCOL);
+    else if (payload->len > out_cap || (next_cursor && next && next->len >= next_cursor_cap)) {
+      *out_len = payload->len;
+      set_error(c, "history buffer too small; retry the same cursor with larger buffers");
+      rc = WG_ERR_OVERFLOW;
+    }
     else {
       if (payload->len) memcpy(out, payload->data, payload->len);
       *out_len = payload->len;
       if (next_cursor && next_cursor_cap) {
-        const wg_field_view *next = field(&response, WG_F_CURSOR);
         if (next) {
-          size_t n = next->len < next_cursor_cap - 1 ? next->len : next_cursor_cap - 1;
+          size_t n = next->len;
           memcpy(next_cursor, next->data, n);
           next_cursor[n] = '\0';
         } else next_cursor[0] = '\0';
@@ -517,15 +588,23 @@ int wg_history(wg_client *c, const char *topic, const char *cursor, uint32_t lim
 
 int wg_poll(wg_client *c, uint32_t timeout_ms, wg_event *out_event) {
   if (!c || !out_event) return WG_ERR_ARGUMENT;
+  memset(out_event, 0, sizeof(*out_event));
   if (pop_event(c, out_event)) return WG_OK;
+  if (c->fd < 0) return WG_ERR_CLOSED;
   uint8_t *buf = NULL; size_t len = 0;
-  int rc = read_frame(c, timeout_ms, &buf, &len);
-  if (rc != WG_OK) return rc;
+  int rc = read_frame(c, now_ms() + timeout_ms, timeout_ms == 0, &buf, &len);
+  if (rc == WG_ERR_TIMEOUT) return rc;
+  if (rc != WG_OK) return stream_error(c, rc);
   wg_frame_view frame; rc = parse_frame(buf, len, &frame);
   if (rc == WG_OK && frame.kind == WG_KIND_EVENT) rc = event_from_frame(&frame, out_event);
   else if (rc == WG_OK) rc = WG_ERR_PROTOCOL;
-  free(buf); return rc;
+  free(buf);
+  if (rc != WG_OK) return stream_error(c, rc);
+  return WG_OK;
 }
+
+int wg_client_fd(const wg_client *c) { return c ? c->fd : -1; }
+size_t wg_pending_events(const wg_client *c) { return c ? c->queue_len : 0; }
 
 const char *wg_last_error(const wg_client *c) { return c ? c->error : "invalid client"; }
 const char *wg_result_string(int result) {

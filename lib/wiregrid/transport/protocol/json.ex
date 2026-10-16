@@ -131,6 +131,7 @@ defmodule Wiregrid.Transport.Protocol.JSON do
        "type" => "event",
        "topic" => Topic.format(envelope.topic),
        "delivery_id" => envelope.delivery_id,
+       "event_id" => Map.get(envelope, :event_id),
        "class" => Atom.to_string(envelope.class),
        "event" => Map.get(envelope, :event) || Map.get(envelope, :payload)
      }}

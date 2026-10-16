@@ -58,6 +58,12 @@ payloads are bytes. content type is a separate field. `general` is the chat chan
 
 connect uses the client timeout for the tcp handshake as well as later reads. a protocol mismatch closes the socket.
 
+request deadlines cover the whole exchange, including writes and intervening events. timeout or malformed input closes the stream; a publish may already have committed, so automatic retries can duplicate it. dns lookup uses the system resolver and is synchronous. `wg_poll` keeps partial frames across timeouts and supports nonblocking calls with a zero timeout.
+
+abi minor 2 exposes `wg_client_fd` (a borrowed descriptor) and `wg_pending_events` for poll/select integration. drain queued events first, and never read, close or change flags on the descriptor yourself. `wg_history` accepts a maximum page size of 100 and reports undersized output buffers with `WG_ERR_OVERFLOW`; grow the buffers and retry the same cursor. the connection stays usable and cursors are never truncated.
+
+`make test` runs the normal protocol exchange and fourteen hostile-peer regressions covering fragmented packets, nonblocking polls, trickled responses, event floods, malformed frames, final responses before eof, and history buffer sizing.
+
 ## compatibility
 
 wrappers should check `WG_ABI_MAJOR` and `WG_PROTOCOL_VERSION`.

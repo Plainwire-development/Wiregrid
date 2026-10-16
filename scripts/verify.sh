@@ -30,5 +30,6 @@ erlc -Werror -I "$ERL_ROOT/usr/include" -o _build/manual_erlang src/*.erl
 ./scripts/check-lfe.sh
 make -C native/c test
 for f in priv/ui/wiregrid.js priv/ui/wiregrid.esm.js priv/ui/js/*.js; do node --check "$f"; done
+npm --prefix test/ui test
 
 printf 'Wiregrid verification gates passed.\n'

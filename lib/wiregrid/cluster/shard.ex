@@ -58,7 +58,15 @@ defmodule Wiregrid.Cluster.Shard do
          {:ok, event} <- decode_remote_event(state, payload),
          {:ok, opts} <- remote_event_opts(Map.get(body, :opts, %{})),
          true <- mark_seen(state, {:topic, topic, event_id}) do
-      _ = Wiregrid.Fanout.topic(state.instance, topic, payload, event, class, opts)
+      _ =
+        Wiregrid.Fanout.topic(
+          state.instance,
+          topic,
+          payload,
+          event,
+          class,
+          Keyword.put(opts, :event_id, event_id)
+        )
     end
   end
 
@@ -75,7 +83,7 @@ defmodule Wiregrid.Cluster.Shard do
          :ok <- Wiregrid.Validation.binary_id(event_id, cfg.max_storage_id_bytes),
          {:ok, event} <- decode_remote_event(state, payload),
          true <- mark_seen(state, {:user_event, user_id, event_id}) do
-      _ = Wiregrid.Fanout.user(state.instance, user_id, payload, event, class)
+      _ = Wiregrid.Fanout.user(state.instance, user_id, payload, event, class, event_id: event_id)
     else
       _ -> :ok
     end
@@ -90,7 +98,15 @@ defmodule Wiregrid.Cluster.Shard do
          {:ok, event} <- decode_remote_event(state, payload),
          {:ok, opts} <- remote_event_opts(Map.get(body, :opts, %{})),
          true <- mark_seen(state, {:room_event, room, event_id}) do
-      _ = Wiregrid.Fanout.room(state.instance, room, payload, event, class, opts)
+      _ =
+        Wiregrid.Fanout.room(
+          state.instance,
+          room,
+          payload,
+          event,
+          class,
+          Keyword.put(opts, :event_id, event_id)
+        )
     end
   end
 

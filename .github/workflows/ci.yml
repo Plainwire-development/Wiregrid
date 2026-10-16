@@ -31,6 +31,12 @@ jobs:
       - run: mix local.hex --force
       - run: mix local.rebar --force
       - run: mix deps.get
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: test/ui/package-lock.json
+      - run: npm ci --prefix test/ui
       - run: ./scripts/verify.sh
       - run: USERS=100 TOPICS=10 MESSAGES=1000 ./scripts/load.sh
 

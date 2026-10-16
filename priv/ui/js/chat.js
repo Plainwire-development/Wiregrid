@@ -4,6 +4,7 @@ export function renderMessage(message, options = {}) {
   const article = document.createElement("article");
   article.className = `wg-message${message.compact ? " wg-message--compact" : ""}`;
   article.dataset.messageId = String(message.id ?? uid("message"));
+  if (message.nonce != null) article.dataset.wgNonce = String(message.nonce);
   article.tabIndex = -1;
 
   const avatar = document.createElement(message.avatarUrl ? "img" : "div");
@@ -101,11 +102,12 @@ export function reconcileOptimistic(container, nonce, message, options = {}) {
   const node = renderMessage(message, options);
   if (old) old.replaceWith(node);
   else container.append(node);
+  trimTimeline(container, options.maxMessages ?? 2000);
   return node;
 }
 
 export function trimTimeline(container, maxMessages = 2000) {
-  const max = clamp(Number(maxMessages) || 2000, 100, 20000);
+  const max = clamp(Math.floor(Number(maxMessages) || 2000), 1, 20000);
   const nodes = qsa(container, ".wg-message");
   for (let i = 0; i < nodes.length - max; i++) nodes[i].remove();
 }

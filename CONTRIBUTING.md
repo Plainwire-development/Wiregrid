@@ -2,6 +2,8 @@
 
 wiregrid tries to keep the hot paths boring: explicit limits, normal otp supervision, small interfaces, and no hidden unbounded queues.
 
+development checks need elixir/otp, a c11 compiler, python 3, and node 24+ with npm. browser test dependencies live under `test/ui` and are never shipped with the ui assets.
+
 before sending a change, run:
 
 ```sh

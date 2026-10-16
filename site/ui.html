@@ -72,6 +72,17 @@ mix wiregrid.ui.install priv/static/vendor/wiregrid --force</code></pre>
 <p>Layout: <code>wg-root</code>, <code>wg-app</code>, <code>wg-sidebar</code>, <code>wg-members</code>, <code>wg-main</code>, <code>wg-header</code>, <code>wg-pane</code>, <code>wg-stack</code>, <code>wg-inline</code>, <code>wg-split</code>, <code>wg-scroll</code>. Chrome: <code>wg-button</code> with <code>wg-button--primary</code>, <code>--danger</code>, <code>--ghost</code>, <code>--icon</code>, <code>--sm</code>, <code>--lg</code>; <code>wg-input</code>; <code>wg-nav-item</code>; <code>wg-title</code>. Chat: <code>wg-message</code>, <code>wg-reaction</code>, channel and member lists, replies, attachments, composers, typing rows, thread panels, unread separators. App pieces include menus, tabs, dialogs, banners, switches, toasts, and skeletons. <code>wg-sr-only</code> hides text visually and leaves it available to assistive tech. Interactive helpers use normal focusable elements. The motion layer follows <code>prefers-reduced-motion</code>.</p>
 
 <h2 id="javascript">JavaScript</h2>
+<p>For a complete optional panel, give the parent a height and mount the component. The host route uses <code>Wiregrid.Transport.Protocol.JSON</code> with the application's authentication and origin policy.</p>
+<pre><code class="language-js">import { mountChat } from "./wiregrid/wiregrid.esm.js";
+
+const chat = mountChat(document.querySelector("#chat"), {
+  url: "wss://your-app.example/chat",
+  topic: "general",
+  maxMessages: 500
+});
+await chat.ready;
+// chat.destroy() on unmount.</code></pre>
+<p><code>mountChat</code> owns subscriptions, acknowledgements, a bounded timeline, connection status, and an async composer that preserves drafts on failure. It does not fetch history or reconnect automatically. <code>mapMessage(envelope)</code> customizes the message view. <code>createTimeline</code> is the smaller indexed component for existing layouts; append and ordinary upsert avoid scanning the retained history. Both entry points and individual modules include TypeScript declarations.</p>
 <pre><code class="language-js">import {
   appendMessage,
   bindChatActions,
@@ -81,9 +92,10 @@ mix wiregrid.ui.install priv/static/vendor/wiregrid --force</code></pre>
   setTheme,
   connectChat
 } from "./wiregrid/wiregrid.esm.js";</code></pre>
-<p><code>wiregrid.esm.js</code> re-exports <code>js/core.js</code>, <code>js/chat.js</code>, <code>js/composer.js</code>, <code>js/overlays.js</code>, <code>js/liveview.js</code>, and <code>js/client.js</code>. The global <code>wiregrid</code> object on the classic bundle exposes <code>version</code> (<code>"1.0.0"</code>), <code>createStore</code>, <code>setTheme</code>, <code>restoreTheme</code>, <code>setDensity</code>, <code>appendMessage</code>, <code>upsertMessage</code>, <code>bindChatActions</code>, <code>renderMessage</code>, <code>jumpToMessage</code>, <code>bindComposer</code> (also as <code>mountComposer</code>), <code>createOverlay</code>, <code>bindTabs</code>, <code>WiregridHooks</code>, and <code>connectChat</code>.</p>
+<p><code>wiregrid.esm.js</code> re-exports the core, chat, composer, overlay, LiveView, client, timeline, and mount modules. Its default export exposes the main helpers too. The classic bundle exposes a smaller <code>WiregridUI</code> global with <code>version</code>, <code>setTheme</code>, <code>setDensity</code>, <code>mountComposer</code>, <code>appendMessage</code>, and <code>jumpToMessage</code>.</p>
 <p><code>appendMessage</code> and <code>upsertMessage</code> keep a bounded set of nodes. <code>trimTimeline</code> defaults to 2,000 retained messages. <code>bindComposer</code> handles enter-to-send, textarea growth, and a UTF-8 byte limit. <code>createOverlay</code> traps focus and restores it on close. <code>text()</code> in <code>core.js</code> creates an element and assigns <code>textContent</code>.</p>
 <p><code>connectChat(url, handlers)</code> speaks <code>Wiregrid.Transport.Protocol.JSON</code> over a WebSocket, using the same topic strings as the C gateway. Point Cowboy at that protocol and send text frames. <code>chat.html</code> is a static shell. Open it beside <code>wiregrid.css</code> and add <code>?socket=ws://127.0.0.1:PORT/chat</code> when a JSON socket is listening. The page subscribes to <code>general</code>, appends with <code>textContent</code>, and acks deliveries.</p>
+<p><code>client.ready</code> waits for the session-ready frame. Queued commands count toward <code>maxPending</code> (256); connection and request deadlines default to 10 seconds, and <code>maxBufferedBytes</code> defaults to 1 MiB. Closing rejects pending work. Optional <code>onDebug</code> events contain only event names, operations, and counts. Browser WebSockets cannot set bearer headers; use an application's session/cookie-aware <code>auth_fun</code> or authenticated proxy and an explicit origin allowlist. A timed-out publish may already have committed, so calls are never automatically retried.</p>
 <p><code>js/liveview.js</code> exports <code>WiregridHooks</code> for the composer and delegated message actions. The hooks call <code>pushEvent</code>. They do not open a second socket.</p>
 <p>Message rows use <code>content-visibility</code> where the browser supports it. For a timeline that must keep tens of thousands of rows mounted, pair the CSS with a windowing library. Custom markup you build from classes alone still needs the application to supply labels, focus order, and live regions.</p>
     </article>

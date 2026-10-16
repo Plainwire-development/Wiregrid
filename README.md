@@ -50,6 +50,24 @@ all public classes start with `wg-`. most of the look comes from css variables, 
 
 see `docs/ui.md` for the class layers, theme variables, and browser helpers.
 
+for a complete chat panel, mount the optional component into a sized container:
+
+```js
+import { mountChat } from "./wiregrid/wiregrid.esm.js";
+
+const chat = mountChat(document.querySelector("#chat"), {
+  url: "wss://your-app.example/chat",
+  topic: "general",
+  maxMessages: 500,
+  onError: (error) => console.error("chat request failed", error)
+});
+
+await chat.ready; // authenticated session and subscription are ready
+// chat.destroy() releases the socket, component, and listeners on unmount.
+```
+
+the server route uses `Wiregrid.Transport.Protocol.JSON` and your app's authentication and origin policy. `mountChat` handles subscriptions, acknowledgements, bounded message retention, connection state, and a composer that keeps drafts after failed sends. `createTimeline` is the smaller indexed component for apps with their own socket or page layout.
+
 ## lfe
 
 there is more lfe in this repo than a normal binding needs, and that is on purpose.

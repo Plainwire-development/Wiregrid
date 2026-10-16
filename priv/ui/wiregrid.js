@@ -21,6 +21,8 @@
     if (!textarea) throw new Error("Wiregrid composer requires a textarea");
     const maxBytes = options.maxBytes || 65536;
     const encoder = new TextEncoder();
+    let destroyed = false;
+    let revision = 0;
     function bytes() {
       return encoder.encode(textarea.value).byteLength;
     }
@@ -30,39 +32,62 @@
         Math.min(textarea.scrollHeight, options.maxHeight || 220) + "px";
       const count = form.querySelector("[data-wg-byte-count]");
       if (count) count.textContent = bytes() + "/" + maxBytes;
+      form.dataset.overLimit = bytes() > maxBytes ? "true" : "false";
     }
-    function submit() {
+    async function submit() {
+      if (destroyed) return false;
       const value = textarea.value;
-      if (!value.trim() || bytes() > maxBytes) return;
-      const result = options.onSubmit && options.onSubmit(value);
-      if (result !== false) {
-        textarea.value = "";
-        sync();
+      if (!value.trim() || bytes() > maxBytes || form.dataset.submitting === "true") return false;
+      form.dataset.submitting = "true";
+      const submittedRevision = revision;
+      try {
+        const result = options.onSubmit && await options.onSubmit(value, { form, textarea });
+        if (!destroyed && result !== false && textarea.value === value && revision === submittedRevision) {
+          textarea.value = "";
+          sync();
+        }
+        return result !== false;
+      } catch (error) {
+        if (!destroyed) {
+          try {
+            if (options.onError) await options.onError(error, { form, textarea });
+            else form.dispatchEvent(new CustomEvent("wiregrid:error", { detail: error, bubbles: true }));
+          } catch (handlerError) {
+            form.dispatchEvent(new CustomEvent("wiregrid:error", { detail: handlerError, bubbles: true }));
+          }
+        }
+        return false;
+      } finally {
+        if (!destroyed) delete form.dataset.submitting;
       }
     }
+    function onInput() { revision++; sync(); }
     function onKey(event) {
       if (
         event.key === "Enter" &&
         !event.shiftKey &&
+        !event.altKey && !event.ctrlKey && !event.metaKey &&
         !event.isComposing &&
         options.enterToSend !== false
       ) {
         event.preventDefault();
-        submit();
+        void submit();
       }
     }
     function onSubmit(event) {
       event.preventDefault();
-      submit();
+      void submit();
     }
-    textarea.addEventListener("input", sync);
+    textarea.addEventListener("input", onInput);
     textarea.addEventListener("keydown", onKey);
     form.addEventListener("submit", onSubmit);
     sync();
     return {
       submit: submit,
       destroy: function () {
-        textarea.removeEventListener("input", sync);
+        destroyed = true;
+        delete form.dataset.submitting;
+        textarea.removeEventListener("input", onInput);
         textarea.removeEventListener("keydown", onKey);
         form.removeEventListener("submit", onSubmit);
       },

@@ -684,6 +684,20 @@
 .wg-option:hover {
   background: var(--wg-panel-3);
 }
+.wg-chat {
+  height: 100%;
+  min-height: 280px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  background: var(--wg-bg);
+  color: var(--wg-text);
+}
+.wg-chat__messages {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+}
 .wg-nav {
   padding: 10px;
   display: flex;

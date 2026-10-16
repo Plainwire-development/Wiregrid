@@ -1,5 +1,13 @@
 # changelog
 
+## unreleased
+
+- bound foreign authentication attempts, hello deadlines and frame admission; monitor connection workers so crashes release capacity and gateway shutdown closes clients.
+- preserve partial c poll frames, enforce total request deadlines with nonblocking io, reject malformed streams, and avoid truncated history cursors. c abi minor 2 adds borrowed-descriptor and pending-event accessors.
+- preserve server event ids through live, prepared, batch, room, user, cluster and replay deliveries, including browser json and foreign events.
+- add typed `mountChat` and indexed `createTimeline` components, bounded browser requests, optional metadata-only debug callbacks, and safe async composers for both esm and global bundles.
+- run dom, typed-consumer and hostile native-peer regressions in the verification gates. update test-only xandra and decimal to remove decimal allocation denial-of-service advisories.
+
 ## 1.0.0
 
 first published release.

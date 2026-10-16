@@ -26,6 +26,14 @@ beam distribution should be treated as a trusted private network. do not expose 
 
 `Wiregrid.Foreign.Gateway` binds to loopback by default and uses a bounded protocol, but it does not provide tls. anonymous sessions are rejected unless `allow_anonymous: true` is set, and that option only starts when the bind address is loopback. keep the socket private or terminate tls before it, and pass an `authenticate` function for anything you do not fully trust.
 
+foreign connections have absolute hello deadlines, a failed-authentication budget, per-connection frame admission and monitored connection slots. the c client uses nonblocking socket io and total request deadlines, preserves incomplete poll frames, and closes on protocol errors or request timeouts. browser requests have bounded pending work, send buffers and deadlines. see [foreign clients](foreign-clients.md) and [ui](ui.md) for the defaults and retry behavior.
+
+## development dependencies
+
+the production core has no mandatory third-party dependencies. test dependencies include decimal 3.1.2 or later to avoid [unbounded exponent allocation](https://github.com/ericmj/decimal/security/advisories/GHSA-rhv4-8758-jx7v) and [unbounded rounding allocation](https://github.com/ericmj/decimal/security/advisories/GHSA-6c27-994x-c52f); xandra 0.20 permits that version.
+
+the otp 26-compatible cowboy test fixture still pins cowlib 2.19. hex reports link-header, structured-header, and cookie encoder advisories against that version. wiregrid's transport does not call those encoder functions, and the fixture is test-only; this does not certify a host application's use of cowlib. production applications supply their own cowboy dependency and should review [cowlib's current advisories](https://hex.pm/packages/cowlib/advisories) for the functions they use. updating to the latest cowlib alone does not clear every currently reported advisory.
+
 webhooks resolve and validate destinations on every attempt, reject private/link-local/loopback/multicast and common internal transition ranges, connect to the validated address while preserving tls hostname/sni checks, do not follow redirects, and sign deliveries.
 
 ## privacy

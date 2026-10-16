@@ -1,0 +1,12 @@
+{
+  "name": "wiregrid-ui-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-isolation=none *.test.js && tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.13",
+    "typescript": "^7.0.2"
+  }
+}

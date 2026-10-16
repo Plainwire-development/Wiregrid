@@ -11,3 +11,5 @@ native/c/libwiregrid.a
 native/c/tests/client_test
 native/c/*.o
 bindings/gleam/build/
+test/ui/node_modules/
+__pycache__/

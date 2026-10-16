@@ -405,7 +405,8 @@ defmodule Wiregrid do
          :ok <- authorize_direct(instance, cfg, t, :send_user, user_id, opts),
          {:ok, payload} <- Wiregrid.Codec.encode(cfg, event),
          :ok <- maybe_persist(instance, {:user, user_id}, event_id, event, meta, persist),
-         {:ok, local} <- Wiregrid.Fanout.user(instance, user_id, payload, event, class) do
+         {:ok, local} <-
+           Wiregrid.Fanout.user(instance, user_id, payload, event, class, event_id: event_id) do
       remote =
         cluster_status(cluster and cfg.cluster, fn ->
           Wiregrid.Cluster.user_event(instance, user_id, event_id, payload, class)
@@ -474,7 +475,7 @@ defmodule Wiregrid do
          :ok <- authorize_direct(instance, cfg, t, :send_users, users, opts),
          {:ok, payload} <- Wiregrid.Codec.encode(cfg, event) do
       event_id = Wiregrid.ID.generate()
-      local = direct_fanout(instance, targets, {:custom, :users}, payload, event, class)
+      local = direct_fanout(instance, targets, {:custom, :users}, payload, event, class, event_id)
 
       remote =
         cluster_user_batch(instance, users, event_id, payload, class, cluster and cfg.cluster)
@@ -611,7 +612,8 @@ defmodule Wiregrid do
          {:ok, cluster} <- boolean_opt(Keyword.get(opts, :cluster, true), :invalid_cluster_option),
          :ok <- authorize_direct(instance, cfg, t, :send_user, user_id, opts),
          :ok <- maybe_persist(instance, {:user, user_id}, event_id, event, meta, persist),
-         {:ok, local} <- Wiregrid.Fanout.user(instance, user_id, payload, event, class) do
+         {:ok, local} <-
+           Wiregrid.Fanout.user(instance, user_id, payload, event, class, event_id: event_id) do
       remote =
         cluster_status(cluster and cfg.cluster, fn ->
           Wiregrid.Cluster.user_event(instance, user_id, event_id, payload, class)
@@ -652,7 +654,7 @@ defmodule Wiregrid do
          {:ok, cluster} <- boolean_opt(Keyword.get(opts, :cluster, true), :invalid_cluster_option),
          :ok <- authorize_direct(instance, cfg, t, :send_users, users, opts) do
       event_id = Wiregrid.ID.generate()
-      local = direct_fanout(instance, targets, {:custom, :users}, payload, event, class)
+      local = direct_fanout(instance, targets, {:custom, :users}, payload, event, class, event_id)
 
       remote =
         cluster_user_batch(instance, users, event_id, payload, class, cluster and cfg.cluster)
@@ -1196,12 +1198,18 @@ defmodule Wiregrid do
   defp bounded_list(_, _limit), do: {:error, :invalid_exclusions}
 
   defp fanout_opts(normalized),
-    do: [exclude_sessions: normalized.exclude_sessions, exclude_users: normalized.exclude_users]
+    do: [
+      exclude_sessions: normalized.exclude_sessions,
+      exclude_users: normalized.exclude_users,
+      event_id: normalized.event_id
+    ]
 
-  defp direct_fanout(instance, session_ids, topic, payload, event, class) do
+  defp direct_fanout(instance, session_ids, topic, payload, event, class, event_id \\ nil) do
     Enum.reduce(session_ids, %{sent: 0, dropped: 0, evicted: 0, gone: 0, overloaded: 0}, fn sid,
                                                                                             acc ->
-      case Wiregrid.Delivery.send_session(instance, sid, topic, payload, event, class) do
+      case Wiregrid.Delivery.send_session(instance, sid, topic, payload, event, class,
+             event_id: event_id
+           ) do
         :sent -> Map.update!(acc, :sent, &(&1 + 1))
         :dropped -> Map.update!(acc, :dropped, &(&1 + 1))
         :evicted -> Map.update!(acc, :evicted, &(&1 + 1))
@@ -1234,6 +1242,7 @@ defmodule Wiregrid do
 
   defp publish_batch_event(instance, cfg, topic, event, normalized) do
     event_id = Wiregrid.ID.generate()
+    normalized = Map.put(normalized, :event_id, event_id)
 
     with {:ok, payload} <- Wiregrid.Codec.encode(cfg, event),
          :ok <-

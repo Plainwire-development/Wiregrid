@@ -102,7 +102,7 @@ defmodule Wiregrid.Foreign.Protocol do
   defp decode_fields(_rest, _acc, count) when count >= @max_fields, do: {:error, :too_many_fields}
 
   defp decode_fields(<<tag, len::unsigned-big-32, rest::binary>>, acc, count)
-       when len <= @max_field_bytes and byte_size(rest) >= len do
+       when tag > 0 and len <= @max_field_bytes and byte_size(rest) >= len do
     if Map.has_key?(acc, tag) do
       {:error, {:duplicate_field, tag}}
     else

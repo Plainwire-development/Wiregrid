@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define WG_ABI_MAJOR 1
-#define WG_ABI_MINOR 1
+#define WG_ABI_MINOR 2
 #define WG_PROTOCOL_VERSION 1
 #define WG_MAX_ERROR 256
 #define WG_DEFAULT_EVENT_QUEUE 1024
@@ -67,15 +67,23 @@ int wg_join_room(wg_client *client, const char *room);
 int wg_leave_room(wg_client *client, const char *room);
 int wg_ping(wg_client *client, char *server_version, size_t version_cap);
 
-/* cursor may be NULL. limit 0 asks the server for its default page size.
-   out receives a JSON object {"events":[...]}. next_cursor may be NULL. */
+/* cursor may be NULL. limit 0 asks the server for its default page size (max 100).
+   out receives a JSON object {"events":[...]}. next_cursor may be NULL.
+   WG_ERR_OVERFLOW leaves the connection usable; out_len reports payload size.
+   Retry with the same cursor and larger buffers. Cursors are never truncated. */
 int wg_history(wg_client *client, const char *topic, const char *cursor,
                uint32_t limit, void *out, size_t out_cap, size_t *out_len,
                char *next_cursor, size_t next_cursor_cap);
 
-/* timeout_ms == 0 performs a non-blocking poll. */
+/* timeout_ms == 0 performs a non-blocking poll. Partial frames survive poll
+   timeouts. A request timeout closes the connection to preserve ordering. */
 int wg_poll(wg_client *client, uint32_t timeout_ms, wg_event *out_event);
 void wg_event_free(wg_event *event);
+
+/* Borrowed descriptor for poll/select integration; -1 after stream failure.
+   Do not read, write, close or change flags on it. Drain pending events first. */
+int wg_client_fd(const wg_client *client);
+size_t wg_pending_events(const wg_client *client);
 
 const char *wg_last_error(const wg_client *client);
 const char *wg_result_string(int result);

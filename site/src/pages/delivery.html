@@ -8,6 +8,7 @@
     envelope.instance
     envelope.session_id
     envelope.delivery_id
+    envelope.event_id
     envelope.topic
     envelope.class
     envelope.event
@@ -20,6 +21,7 @@ end</code></pre>
   <li><code>:both</code> adds <code>event</code> and <code>payload</code></li>
 </ul>
 <p><code>Wiregrid.decode_payload/2</code> turns an encoded payload back into a term for the instance’s codec. <code>Wiregrid.Chat.ack/2</code> needs <code>session_id</code> and <code>delivery_id</code> on that map.</p>
+<p>Publish, room, user, batch, cluster and replay deliveries include the server <code>event_id</code>. It matches the storage row and publish result, so a client can reconcile history and live events. The per-session <code>delivery_id</code> still identifies the acknowledgement reservation. Browser JSON frames and foreign event frames expose the same event id.</p>
 
 <h2>Soft queue and hard queue</h2>
 <p>Defaults are <code>soft_queue: 500</code> and <code>hard_queue: 2_000</code>. <code>soft_queue</code> must be strictly below <code>hard_queue</code> or startup returns <code>:soft_queue_must_be_below_hard_queue</code>.</p>

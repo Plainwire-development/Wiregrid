@@ -142,6 +142,7 @@ defmodule Wiregrid.ForeignGatewayTest do
     assert {:ok, echo} = recv(sock)
     assert {:ok, echo_frame} = Protocol.decode(echo)
     assert echo_frame.kind == 2
+    assert echo_frame.fields[Protocol.field(:event_id)] != ""
     assert {:ok, %{"body" => "from c"}} = JSON.decode(echo_frame.fields[Protocol.field(:payload)])
 
     {_delivery, envelope} = receive_delivery()
@@ -187,6 +188,104 @@ defmodule Wiregrid.ForeignGatewayTest do
     assert {:ok, _} = recv_ok(sock)
     assert Wiregrid.room_member?(instance, "lobby", session_id)
     :gen_tcp.close(sock)
+  end
+
+  test "failed authentication is bounded per socket", %{instance: instance} do
+    owner = self()
+
+    gateway =
+      start_supervised!(
+        {Gateway,
+         instance: instance,
+         max_auth_attempts: 2,
+         authenticate: fn _, _ ->
+           send(owner, :auth_attempt)
+           {:error, :denied}
+         end}
+      )
+
+    sock = tcp(Gateway.port(gateway))
+
+    for _ <- 1..2 do
+      :ok = :gen_tcp.send(sock, hello("ada"))
+      assert {:ok, frame} = recv(sock)
+      assert {:ok, %{fields: fields}} = Protocol.decode(frame)
+      assert fields[Protocol.field(:error)] == "denied"
+      assert_receive :auth_attempt
+    end
+
+    assert {:error, :closed} = recv(sock)
+    refute_receive :auth_attempt
+  end
+
+  test "the handshake deadline cannot be extended by unauthenticated traffic", %{
+    instance: instance
+  } do
+    gateway = start_supervised!({Gateway, instance: instance, handshake_timeout_ms: 100})
+    sock = tcp(Gateway.port(gateway))
+    # A valid command before hello must not refresh the absolute deadline.
+    :ok = :gen_tcp.send(sock, request(Protocol.op(:ping), 1, []))
+    assert {:ok, _} = recv(sock)
+    assert {:error, :closed} = :gen_tcp.recv(sock, 0, 1_000)
+  end
+
+  test "frame admission also bounds valid ping floods", %{instance: instance} do
+    gateway =
+      start_supervised!({Gateway, instance: instance, allow_anonymous: true, frame_rate_limit: 2})
+
+    sock = tcp(Gateway.port(gateway))
+    :ok = :gen_tcp.send(sock, hello("ada"))
+    assert {:ok, _} = recv_ok(sock)
+    :ok = :gen_tcp.send(sock, request(Protocol.op(:ping), 2, []))
+    assert {:ok, _} = recv_ok(sock)
+    :ok = :gen_tcp.send(sock, request(Protocol.op(:ping), 3, []))
+    assert {:ok, frame} = recv(sock)
+    assert {:ok, %{fields: fields}} = Protocol.decode(frame)
+    assert fields[Protocol.field(:error)] == "rate_limited"
+    assert {:error, :closed} = recv(sock)
+  end
+
+  test "worker death releases the admission slot and the session", %{instance: instance} do
+    gateway =
+      start_supervised!({Gateway, instance: instance, allow_anonymous: true, max_connections: 1})
+
+    sock = tcp(Gateway.port(gateway))
+    :ok = :gen_tcp.send(sock, hello("ada"))
+    assert {:ok, response} = recv_ok(sock)
+    sid = response.fields[Protocol.field(:session_id)]
+    assert eventually(fn -> map_size(:sys.get_state(gateway).connections) == 1 end)
+    [worker] = Map.keys(:sys.get_state(gateway).connections)
+    Process.exit(worker, :kill)
+    assert {:error, :closed} = recv(sock)
+    assert eventually(fn -> Wiregrid.session(instance, sid) == {:error, :unknown_session} end)
+    next = tcp(Gateway.port(gateway))
+    :ok = :gen_tcp.send(next, hello("lin"))
+    assert {:ok, _} = recv_ok(next)
+    :gen_tcp.close(next)
+  end
+
+  test "stopping the gateway closes its existing workers", %{instance: instance} do
+    gateway = start_supervised!({Gateway, instance: instance, allow_anonymous: true})
+    sock = tcp(Gateway.port(gateway))
+    :ok = :gen_tcp.send(sock, hello("ada"))
+    assert {:ok, _} = recv_ok(sock)
+    GenServer.stop(gateway)
+    assert {:error, :closed} = recv(sock)
+    assert eventually(fn -> Wiregrid.user_session_count(instance, "ada") == {:ok, 0} end)
+  end
+
+  test "invalid and duplicate gateway options return errors", %{instance: instance} do
+    for opts <- [
+          [instance: instance, debug: :yes],
+          [instance: instance, max_auth_attempts: 0],
+          [instance: instance, allow_anonymous: "true"],
+          [instance: instance, ip: :any],
+          [instance: instance, port: 0, port: 1],
+          [instance: instance, typo: true],
+          [:broken]
+        ] do
+      assert {:error, %ArgumentError{}} = Gateway.start_link(opts)
+    end
   end
 
   defp tcp(port) do

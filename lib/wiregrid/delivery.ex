@@ -11,6 +11,7 @@ defmodule Wiregrid.Delivery do
     case Wiregrid.Tables.get(instance) do
       %{config: cfg, tables: t} ->
         with {:ok, context} <- delivery_context(opts, cfg),
+             {:ok, event_id} <- event_id(Keyword.get(opts, :event_id), cfg),
              {:ok, exclusions} <- exclusion_sets(opts) do
           send_session_prevalidated(
             instance,
@@ -22,7 +23,8 @@ defmodule Wiregrid.Delivery do
             event,
             class,
             context,
-            exclusions
+            exclusions,
+            event_id
           )
         else
           {:error, _} -> :gone
@@ -46,7 +48,22 @@ defmodule Wiregrid.Delivery do
         event,
         class,
         context,
-        {excluded_sessions, excluded_users}
+        exclusions,
+        event_id \\ nil
+      )
+
+  def send_session_prevalidated(
+        instance,
+        t,
+        cfg,
+        session_id,
+        topic,
+        payload,
+        event,
+        class,
+        context,
+        {excluded_sessions, excluded_users},
+        event_id
       )
       when class in [:durable, :ephemeral] and is_binary(payload) and is_map(context) do
     case :ets.lookup(t.sessions, session_id) do
@@ -54,7 +71,18 @@ defmodule Wiregrid.Delivery do
         if excluded?(session, excluded_sessions, excluded_users) do
           :excluded
         else
-          reserve_delivery_slot(instance, t, cfg, session, topic, payload, event, class, context)
+          reserve_delivery_slot(
+            instance,
+            t,
+            cfg,
+            session,
+            topic,
+            payload,
+            event,
+            class,
+            context,
+            event_id
+          )
         end
 
       [] ->
@@ -72,7 +100,8 @@ defmodule Wiregrid.Delivery do
         _event,
         _class,
         _context,
-        _exclusions
+        _exclusions,
+        _event_id
       ),
       do: :gone
 
@@ -161,7 +190,18 @@ defmodule Wiregrid.Delivery do
     end
   end
 
-  defp reserve_delivery_slot(instance, t, cfg, session, topic, payload, event, class, context) do
+  defp reserve_delivery_slot(
+         instance,
+         t,
+         cfg,
+         session,
+         topic,
+         payload,
+         event,
+         class,
+         context,
+         event_id
+       ) do
     case Wiregrid.Capacity.reserve(
            t.capacity,
            :delivery_reservations,
@@ -180,6 +220,7 @@ defmodule Wiregrid.Delivery do
               event,
               class,
               context,
+              event_id,
               pending
             )
 
@@ -199,7 +240,19 @@ defmodule Wiregrid.Delivery do
     end
   end
 
-  defp apply_pressure(instance, t, cfg, session, topic, payload, event, class, context, pending) do
+  defp apply_pressure(
+         instance,
+         t,
+         cfg,
+         session,
+         topic,
+         payload,
+         event,
+         class,
+         context,
+         event_id,
+         pending
+       ) do
     cond do
       pending > cfg.hard_queue ->
         rollback_count(t, session.id)
@@ -214,11 +267,11 @@ defmodule Wiregrid.Delivery do
         :dropped
 
       true ->
-        reserve_and_send(instance, t, session, topic, payload, event, class, context)
+        reserve_and_send(instance, t, session, topic, payload, event, class, context, event_id)
     end
   end
 
-  defp reserve_and_send(instance, t, session, topic, payload, event, class, context) do
+  defp reserve_and_send(instance, t, session, topic, payload, event, class, context, event_id) do
     delivery_id = Wiregrid.ID.generate()
     key = {session.id, delivery_id}
 
@@ -233,6 +286,7 @@ defmodule Wiregrid.Delivery do
             class: class
           }
 
+          base = if is_nil(event_id), do: base, else: Map.put(base, :event_id, event_id)
           base = if map_size(context) == 0, do: base, else: Map.put(base, :context, context)
           envelope = delivery_envelope(session.delivery_format, base, payload, event)
 
@@ -312,6 +366,16 @@ defmodule Wiregrid.Delivery do
 
       _ ->
         {:error, :invalid_delivery_context}
+    end
+  end
+
+  @doc false
+  def event_id(nil, _cfg), do: {:ok, nil}
+
+  def event_id(value, cfg) do
+    case Wiregrid.Validation.binary_id(value, cfg.max_storage_id_bytes) do
+      :ok -> {:ok, value}
+      {:error, _} = error -> error
     end
   end
 

@@ -72,6 +72,28 @@ these are class-level building blocks. wiregrid does not force one generated dom
 
 ## javascript helpers
 
+the complete panel is optional too. give its parent a height, import the css, then mount it:
+
+```html
+<div id="chat" style="height: 600px"></div>
+```
+
+```js
+import { mountChat } from "./wiregrid/wiregrid.esm.js";
+
+const chat = mountChat(document.querySelector("#chat"), {
+  url: "wss://your-app.example/chat",
+  topic: "general",
+  maxMessages: 500,
+  maxBytes: 65536,
+  onError(error) { console.error("chat request failed", error); }
+});
+await chat.ready;
+// Call chat.destroy() when the page or framework component unmounts.
+```
+
+this creates a labeled panel, connection status, scrollable message log, and composer. it waits for a session and subscription before enabling send, acknowledges received deliveries, and deduplicates message events by their server event id. channel aliases such as `channel:general` work too. it renders ordinary `message` events; provide `mapMessage(envelope)` for an application-specific view, or return `null` to omit an event. the app still supplies trusted author display data and owns edit/delete/reaction projections. it does not automatically fetch history or reconnect; `chat.client` exposes the socket commands and `chat.timeline` exposes the retained rows.
+
 ```js
 import {
   appendMessage,
@@ -85,11 +107,30 @@ import {
 
 `appendMessage` and `upsertMessage` keep retained message nodes bounded by default. `bindComposer` handles enter-to-send, textarea growth, and a utf-8 byte limit. `createOverlay` manages focus and restores it on close. tabs and menus have keyboard behavior.
 
+for high message volumes, use `createTimeline(container, {maxMessages: 2000})`. it indexes ids and nonces, so appending, replacing a known id, and evicting the oldest row do not scan the retained dom. it owns its message nodes and exposes `append`, `upsert`, `get`, `remove`, `clear`, `size`, and `destroy`. an optimistic row with a `nonce` is reconciled when a server row carries that nonce. changing an optimistic id rebuilds the small retained index once to preserve display and eviction order. scrolling follows new messages only when the reader is already near the bottom. `autoScroll: false` disables that behavior.
+
+both the esm and global composers await `onSubmit`, prevent duplicate sends, preserve failed drafts, and keep text typed while a send is in flight. returning `false` keeps the submitted text too. use `onError(error, {form, textarea})` to show failures; without it, the form emits a bubbling `wiregrid:error` event. call `destroy` before replacing a form. modified enter and ime composition do not send a message.
+
+the esm entry point and individual modules include typescript declarations. `mountComposer` is an alias of `bindComposer` on the esm entry point; the classic global bundle keeps its smaller compatibility api.
+
 user message strings are inserted with `textContent`. wiregrid intentionally does not have a helper that accepts arbitrary html from a message body. if the app supports markdown, render and sanitize it in the app's own trusted markdown pipeline.
 
 ## browser socket
 
 `js/client.js` exports `connectChat`. it speaks `Wiregrid.Transport.Protocol.JSON` over a websocket, using the same topic strings as the c gateway. point cowboy at that protocol and send text frames.
+
+`client.ready` resolves with the server's `ready` message after the authenticated session exists. commands queued before that message count toward the pending limit. the browser receives binary json frames as array buffers as well as text frames. `subscribe`, `unsubscribe`, `say`, `publish`, `history`, `ack`, `presence`, `joinRoom`, `leaveRoom`, and `ping` return promises. failed responses reject with the server response; socket, deadline, and local admission failures reject with an `Error`.
+
+| option | default | purpose |
+| --- | ---: | --- |
+| `connectTimeoutMs` | 10000 | deadline for the session ready message |
+| `requestTimeoutMs` | 10000 | total command deadline, including waiting for readiness |
+| `maxPending` | 256 | maximum queued and outstanding requests |
+| `maxBufferedBytes` | 1048576 | maximum single request and combined unsent command/websocket bytes |
+
+these options are positive integers. callers can inspect `pendingRequests` and supply `onError` and `onDebug`. debug events contain only a fixed event name, operation, and pending count; they omit urls, tokens, topics and message content. `close()` rejects pending work immediately. callbacks may return promises; rejected callbacks are sent to `onError`. requests are never automatically retried because a timed-out publish may already have been persisted.
+
+native browser websockets do not let javascript set an authorization header. configure a same-origin session/cookie-aware `auth_fun` or your application's authenticated websocket proxy, plus an explicit `origin_allowlist`; the built-in bearer-header mode is for clients that can set headers. the library does not put credentials into urls.
 
 `chat.html` is a static shell for the css. open it from a static file server next to `wiregrid.css`. add `?socket=ws://127.0.0.1:PORT/chat` when a json websocket is actually listening. the page subscribes to `general`, appends messages with `textContent`, and acks deliveries.
 
@@ -102,6 +143,15 @@ user message strings are inserted with `textContent`. wiregrid intentionally doe
 message rows use `content-visibility` where browsers support it, and the timeline helpers put a ceiling on retained dom nodes.
 
 that is enough for normal chat history. if a screen is expected to keep tens or hundreds of thousands of rows mounted, use the ui pieces with a real virtualization/windowing library instead of asking the browser to keep the entire history in the dom.
+
+maintainers run the dom regressions and typed consumer checks with node 24+:
+
+```sh
+npm ci --prefix test/ui
+npm --prefix test/ui test
+```
+
+these dependencies live under `test/ui`; the shipped browser package has no runtime dependencies.
 
 ## accessibility
 

@@ -7,4 +7,5 @@ cd "$ROOT"
 mix local.hex --force
 mix local.rebar --force
 mix deps.get
+npm ci --prefix test/ui
 printf 'Wiregrid development dependencies are ready.\n'

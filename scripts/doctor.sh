@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(erl erlc elixir mix)
+required=(erl erlc elixir mix node npm cc make python3)
 optional=(docker podman psql redis-cli cqlsh gleam lfe shellcheck)
 fail=0
 

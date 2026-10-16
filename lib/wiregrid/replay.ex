@@ -82,7 +82,8 @@ defmodule Wiregrid.Replay do
       context = %{kind: :replay, storage_id: id, inserted_at_ms: inserted_at}
 
       Wiregrid.Delivery.send_session(instance, session_id, topic, payload, event, class,
-        delivery_context: context
+        delivery_context: context,
+        event_id: id
       )
     else
       false -> {:error, :invalid_storage_row}

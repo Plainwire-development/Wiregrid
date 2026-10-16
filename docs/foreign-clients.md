@@ -23,7 +23,7 @@ after that come zero or more fields. a field is one byte of tag, four bytes of b
 
 protocol 1 limits a frame to 2 mib, a single field to 1 mib, and a frame to 32 fields. duplicate tags are rejected. unknown tags can be ignored, which gives the protocol room for additive fields later.
 
-current operations are `hello`, `subscribe`, `unsubscribe`, `publish`, `ack`, `presence`, `join_room`, `leave_room`, and `ping`. deliveries arrive as asynchronous `event` frames.
+current operations are `hello`, `subscribe`, `unsubscribe`, `publish`, `ack`, `presence`, `join_room`, `leave_room`, `history`, and `ping`. deliveries arrive as asynchronous `event` frames. a delivery's `event_id` matches the id returned by publish and stored in history; `delivery_id` identifies that session's acknowledgement reservation.
 
 payload bodies are just bytes with a content type. json apps can send json, protobuf apps can send protobuf, and so on. foreign clients never have to decode erlang external terms.
 
@@ -45,6 +45,20 @@ it listens on `127.0.0.1` by default. a connection is refused at `hello` unless 
 there is no tls layer inside the protocol. keep the gateway on loopback or a private network, or put a tls proxy/terminator in front of it. keep the authenticate callback bounded.
 
 `authenticate` receives the requested user id and optional token. return `:ok` or `true` to allow it, and an error to reject it. if authentication needs slow network io, put that work behind a bounded service instead of letting connection processes wait forever.
+
+gateway admission is monitored: a crashed worker releases its connection slot, and stopping the gateway also closes its clients. only one acceptor waits for the next free slot. these options bound each connection:
+
+| option | default | behavior |
+| --- | ---: | --- |
+| `handshake_timeout_ms` | 5000 | absolute deadline until hello succeeds; unauthenticated traffic cannot refresh it |
+| `max_auth_attempts` | 5 | close after this many failed hello attempts |
+| `frame_rate_limit` | 240 | inbound frames per connection per window, including acknowledgements and pings |
+| `frame_window_ms` | 60000 | fixed admission window; raise the limit for busy subscribers |
+| `idle_timeout_ms` | 60000 | idle receive timeout |
+| `send_timeout_ms` | 5000 | timeout while writing to a slow peer |
+| `max_protocol_errors` | 8 | close after malformed protocol frames |
+
+`debug: true` enables logger debug messages for connection counts and fixed failure reasons. they contain no identities, topics, tokens, or payloads. unknown, duplicate and malformed options fail startup. these connection limits supplement your application's authentication abuse policy; the authentication callback must still finish within a bounded time.
 
 a durable foreign publish is stored with the configured storage adapter before delivery. ephemeral publishes are not stored.
 
@@ -117,6 +131,12 @@ c abi major `1` speaks foreign protocol `1`. wrappers should query/check those v
 there is no hidden background thread or event loop. one owner drives a client handle at a time. a runtime that wants concurrent use should serialize access to one handle or give separate workers their own handles.
 
 while a synchronous request is waiting for its response, asynchronous deliveries are queued in a bounded native queue. if that queue fills, the client closes the connection and returns `WG_ERR_OVERFLOW`. continuing after silently dropping one delivery would make acknowledgement state ambiguous, so overflow is treated as a broken stream.
+
+c abi minor `2` adds `wg_client_fd` and `wg_pending_events` for event-loop integration without exposing client internals. drain queued events before waiting on the borrowed descriptor; do not read, write, close, or change its flags directly. the handle still has one owner.
+
+request timeouts cover the complete write/response exchange, including intervening deliveries. the connection closes after a request timeout or malformed frame so a late response cannot be confused with a later request. do not retry a timed-out publish blindly: the server may already have committed it. polling timeouts preserve partially read headers and bodies, and `wg_poll(client, 0, ...)` never blocks. tcp connection attempts share the configured timeout after hostname resolution; system dns resolution is synchronous.
+
+`wg_history` accepts limits from 1 to 100; 0 requests the default. if the payload or cursor buffer is too small, it returns `WG_ERR_OVERFLOW` with the required payload length in `out_len` and keeps the connection usable. increase the buffers and retry the same input cursor. cursors are never silently truncated.
 
 current socket code targets posix systems such as linux and macos. the public abi is kept separate from that backend so a windows transport can be added without changing the basic client model.
 

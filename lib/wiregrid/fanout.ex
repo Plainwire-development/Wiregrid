@@ -13,43 +13,49 @@ defmodule Wiregrid.Fanout do
     stream(instance, :presence, user_id, {:user, user_id}, payload, event, :ephemeral, [])
   end
 
-  def user(instance, user_id, payload, event, class) when class in [:durable, :ephemeral] do
-    case Wiregrid.Tables.get(instance) do
-      %{config: cfg, tables: t} ->
-        initial = empty_counts()
-        context = %{}
-        exclusions = {MapSet.new(), MapSet.new()}
+  def user(instance, user_id, payload, event, class, opts \\ [])
+      when class in [:durable, :ephemeral] do
+    with %{config: cfg, tables: t} <- Wiregrid.Tables.get(instance),
+         {:ok, event_id} <- Wiregrid.Delivery.event_id(Keyword.get(opts, :event_id), cfg) do
+      initial = empty_counts()
+      context = %{}
+      exclusions = {MapSet.new(), MapSet.new()}
 
-        counts =
-          Enum.reduce(:ets.lookup(t.user_sessions, user_id), initial, fn {^user_id, session_id},
-                                                                         acc ->
-            result =
-              Wiregrid.Delivery.send_session_prevalidated(
-                instance,
-                t,
-                cfg,
-                session_id,
-                {:user, user_id},
-                payload,
-                event,
-                class,
-                context,
-                exclusions
-              )
+      counts =
+        Enum.reduce(:ets.lookup(t.user_sessions, user_id), initial, fn {^user_id, session_id},
+                                                                       acc ->
+          result =
+            Wiregrid.Delivery.send_session_prevalidated(
+              instance,
+              t,
+              cfg,
+              session_id,
+              {:user, user_id},
+              payload,
+              event,
+              class,
+              context,
+              exclusions,
+              event_id
+            )
 
-            bump(acc, result)
-          end)
+          bump(acc, result)
+        end)
 
-        {:ok, counts}
-
-      _ ->
+      {:ok, counts}
+    else
+      :undefined ->
         {:error, :instance_unavailable}
+
+      {:error, _} = error ->
+        error
     end
   end
 
   defp stream(instance, kind, subject, delivery_topic, payload, event, class, opts) do
     with %{config: cfg, tables: t} <- Wiregrid.Tables.get(instance),
          {:ok, exclusions} <- exclusions(opts),
+         {:ok, event_id} <- Wiregrid.Delivery.event_id(Keyword.get(opts, :event_id), cfg),
          {:ok, context} <- delivery_context(opts, cfg) do
       counts =
         Wiregrid.FanoutIndex.reduce(t, kind, subject, empty_counts(), fn session_id, acc ->
@@ -64,7 +70,8 @@ defmodule Wiregrid.Fanout do
               event,
               class,
               context,
-              exclusions
+              exclusions,
+              event_id
             )
 
           bump(acc, result)
@@ -101,7 +108,13 @@ defmodule Wiregrid.Fanout do
   defp bump(counts, _), do: Map.update!(counts, :gone, &(&1 + 1))
 
   defp exclusions(opts) when is_list(opts) do
-    with :ok <- Wiregrid.Validation.keyword_opts(opts, [:exclude_sessions, :exclude_users]),
+    with :ok <-
+           Wiregrid.Validation.keyword_opts(opts, [
+             :exclude_sessions,
+             :exclude_users,
+             :event_id,
+             :delivery_context
+           ]),
          {:ok, sessions} <- exclusion_set(Keyword.get(opts, :exclude_sessions, [])),
          {:ok, users} <- exclusion_set(Keyword.get(opts, :exclude_users, [])) do
       {:ok, {sessions, users}}

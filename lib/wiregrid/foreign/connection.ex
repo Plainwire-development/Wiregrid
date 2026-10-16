@@ -1,5 +1,6 @@
 defmodule Wiregrid.Foreign.Connection do
   @moduledoc false
+  require Logger
 
   alias Wiregrid.Foreign.JSON
   alias Wiregrid.Foreign.Protocol, as: P
@@ -10,7 +11,7 @@ defmodule Wiregrid.Foreign.Connection do
   @kind_event 2
 
   def run(socket, instance, parent, opts) do
-    Process.flag(:trap_exit, true)
+    now = System.monotonic_time(:millisecond)
 
     state = %{
       socket: socket,
@@ -20,7 +21,16 @@ defmodule Wiregrid.Foreign.Connection do
       authenticate: opts.authenticate,
       idle_timeout_ms: opts.idle_timeout_ms,
       protocol_errors: 0,
-      max_protocol_errors: opts.max_protocol_errors
+      max_protocol_errors: opts.max_protocol_errors,
+      parent_monitor: Process.monitor(parent),
+      handshake_deadline: now + opts.handshake_timeout_ms,
+      auth_attempts: 0,
+      max_auth_attempts: opts.max_auth_attempts,
+      frame_rate_limit: opts.frame_rate_limit,
+      frame_window_ms: opts.frame_window_ms,
+      frame_window_start: now,
+      frame_count: 0,
+      debug: opts.debug
     }
 
     try do
@@ -32,7 +42,7 @@ defmodule Wiregrid.Foreign.Connection do
       :ok
     after
       :gen_tcp.close(socket)
-      send(parent, {:connection_closed, self()})
+      Process.demonitor(state.parent_monitor, [:flush])
     end
   end
 
@@ -44,21 +54,22 @@ defmodule Wiregrid.Foreign.Connection do
   end
 
   defp receive_loop(state) do
+    timeout = receive_timeout(state)
+
     receive do
       {:tcp, socket, frame} when socket == state.socket ->
-        case P.decode(frame) do
-          {:ok, %{kind: @kind_request} = request} ->
-            case handle_request(request, state) do
-              {:ok, next} -> loop(next)
-              {:close, next} -> {:ok, next}
-            end
-
-          {:ok, _} ->
-            protocol_error(state, 0, 0, "unexpected_frame_kind")
+        case admit_frame(state) do
+          {:ok, next} ->
+            receive_frame(frame, next)
 
           {:error, reason} ->
-            protocol_error(state, 0, 0, error_text(reason))
+            debug(state, reason)
+            _ = send_error(state.socket, 0, 0, error_text(reason))
+            {:ok, state}
         end
+
+      {:DOWN, ref, :process, _pid, _reason} when ref == state.parent_monitor ->
+        {:ok, state}
 
       {:tcp_closed, socket} when socket == state.socket ->
         {:ok, state}
@@ -68,14 +79,54 @@ defmodule Wiregrid.Foreign.Connection do
 
       {:"$wiregrid", envelope} ->
         case send_event(state.socket, envelope) do
-          :ok -> loop(state)
+          :ok -> receive_loop(state)
           :error -> {:ok, state}
         end
 
       _ ->
-        loop(state)
+        receive_loop(state)
     after
-      state.idle_timeout_ms -> {:ok, state}
+      timeout -> {:ok, state}
+    end
+  end
+
+  defp receive_frame(frame, state) do
+    case P.decode(frame) do
+      {:ok, %{kind: @kind_request} = request} ->
+        case handle_request(request, state) do
+          {:ok, next} -> loop(next)
+          {:close, next} -> {:ok, next}
+        end
+
+      {:ok, _} ->
+        protocol_error(state, 0, 0, "unexpected_frame_kind")
+
+      {:error, reason} ->
+        protocol_error(state, 0, 0, error_text(reason))
+    end
+  end
+
+  defp receive_timeout(%{session_id: nil} = state) do
+    max(
+      0,
+      min(state.idle_timeout_ms, state.handshake_deadline - System.monotonic_time(:millisecond))
+    )
+  end
+
+  defp receive_timeout(state), do: state.idle_timeout_ms
+
+  defp admit_frame(state) do
+    now = System.monotonic_time(:millisecond)
+
+    state =
+      if now - state.frame_window_start >= state.frame_window_ms,
+        do: %{state | frame_window_start: now, frame_count: 0},
+        else: state
+
+    cond do
+      is_nil(state.session_id) and now >= state.handshake_deadline -> {:error, :handshake_timeout}
+      state.frame_count >= state.frame_rate_limit -> {:error, :rate_limited}
+      true -> {:ok, %{state | frame_count: state.frame_count + 1}}
     end
   end
 
@@ -135,6 +186,8 @@ defmodule Wiregrid.Foreign.Connection do
   end
 
   defp hello(id, fields, %{session_id: nil} = state) do
+    state = %{state | auth_attempts: state.auth_attempts + 1}
+
     with {:ok, user_id} <- fetch_field(fields, P.field(:user_id)),
          :ok <- authenticate(state.authenticate, user_id, Map.get(fields, P.field(:auth_token))),
          {:ok, session_id} <- Wiregrid.connect(state.instance, user_id, self()) do
@@ -150,7 +203,10 @@ defmodule Wiregrid.Foreign.Connection do
         next
       )
     else
-      {:error, reason} -> reply_error(id, P.op(:hello), error_text(reason), state)
+      {:error, reason} ->
+        debug(state, :authentication_failed)
+        result = reply_error(id, P.op(:hello), error_text(reason), state)
+        if state.auth_attempts >= state.max_auth_attempts, do: {:close, state}, else: result
     end
   end
 
@@ -447,4 +503,7 @@ defmodule Wiregrid.Foreign.Connection do
     do: binary_part(value, 0, min(byte_size(value), 256))
 
   defp error_text(value), do: inspect(value, limit: 8, printable_limit: 256)
+
+  defp debug(%{debug: true}, event), do: Logger.debug("wiregrid foreign connection #{event}")
+  defp debug(_state, _event), do: :ok
 end
