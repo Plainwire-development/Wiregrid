@@ -45,7 +45,7 @@ defmodule Wiregrid.MixProject do
     [
       {:postgrex, "~> 0.22.4", only: :test},
       # Keep Postgrex's optional numeric codec above the allocation-DoS fixes.
-      {:decimal, "~> 3.1.2", only: :test},
+      {:decimal, "~> 3.2.0", only: :test},
       {:redix, "~> 1.9", only: :test},
       {:xandra, "~> 0.20.0", only: :test},
       # Cowboy 2.19 pulls Cowlib 2.20, whose `maybe` syntax does not compile on
